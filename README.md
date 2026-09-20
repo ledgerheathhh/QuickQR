@@ -31,7 +31,15 @@
 - 随附应用为 Universal 通用版本，同一个应用包含 Apple Silicon（arm64）和 Intel（x86_64）两种架构，部署目标均为 macOS 13.0 及以上；实际运行验证以本文末尾记录为准。
 - 应用使用本地临时签名，未做 Developer ID 签名或 Apple 公证。适合本机使用；公开分发前需要正式签名、公证并补充目标系统测试。
 
-## 从源码构建
+## 在 Xcode 中运行
+
+仓库已包含 `QuickQR.xcodeproj` 和共享 Scheme。双击 `QuickQR.xcodeproj`，选择 `QuickQR` Scheme 与 `My Mac`，按 `⌘R` 即可运行。
+
+运行后不会出现普通窗口，二维码图标会出现在 macOS 顶部状态栏。点击图标打开弹窗；停止运行使用 `⌘.`。
+
+项目使用 macOS 13.0 最低部署版本，不需要第三方依赖或 Apple Developer Team。Xcode 会使用本地临时签名运行；如果 Xcode 要求选择 Team，可在 Target → Signing & Capabilities 中关闭自动签名，或保持本机临时签名设置。
+
+## 从命令行构建
 
 安装 Apple Command Line Tools 或 Xcode 后，在源码目录执行：
 
@@ -53,6 +61,7 @@ bash build.sh /path/to/output
 
 - `Sources/App.swift`：状态栏、弹窗、剪贴板和文件保存。
 - `Sources/QRCode.swift`：二维码生成、静区及 PNG 编码。
+- `QuickQR.xcodeproj`：可直接在 Xcode 中运行的 macOS App 项目。
 - `Tests/QRCodeTests.swift`：通过 Apple Vision 回读链接、中文、表情、换行、空格、单字符和上限内容，并验证空白和超限输入被拒绝。
 - `scripts/MakeIcon.swift`：生成应用图标。
 - `Info.plist`：应用包配置。
