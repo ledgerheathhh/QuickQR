@@ -1,11 +1,13 @@
 import AppKit
 import CoreImage
+import ImageIO
+import UniformTypeIdentifiers
 
 enum QRCode {
     static let maximumBytes = 2_000
     private static let context = CIContext(options: [.useSoftwareRenderer: true])
 
-    enum Failure: LocalizedError {
+    enum Failure: LocalizedError, Equatable {
         case empty, tooLong, generation
 
         var errorDescription: String? {
@@ -17,7 +19,7 @@ enum QRCode {
         }
     }
 
-    struct Result {
+    struct Result: @unchecked Sendable {
         let cgImage: CGImage
         let png: Data
         var image: NSImage {
@@ -26,9 +28,7 @@ enum QRCode {
     }
 
     static func generate(_ text: String) throws -> Result {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw Failure.empty }
-        let data = Data(text.utf8)
-        guard data.count <= maximumBytes else { throw Failure.tooLong }
+        let data = try validate(text)
         guard let filter = CIFilter(name: "CIQRCodeGenerator") else { throw Failure.generation }
         filter.setValue(data, forKey: "inputMessage")
         filter.setValue("M", forKey: "inputCorrectionLevel")
@@ -40,9 +40,27 @@ enum QRCode {
         let scale = max(4, floor(1024 / bounds.width))
         let output = code.composited(over: white)
             .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        guard let cgImage = context.createCGImage(output, from: output.extent),
-              let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
-        else { throw Failure.generation }
-        return Result(cgImage: cgImage, png: png)
+        guard let cgImage = context.createCGImage(output, from: output.extent) else {
+            throw Failure.generation
+        }
+        let png = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            png,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else { throw Failure.generation }
+        CGImageDestinationAddImage(destination, cgImage, nil)
+        guard CGImageDestinationFinalize(destination) else { throw Failure.generation }
+        return Result(cgImage: cgImage, png: png as Data)
+    }
+
+    static func validate(_ text: String) throws -> Data {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw Failure.empty
+        }
+        let data = Data(text.utf8)
+        guard data.count <= maximumBytes else { throw Failure.tooLong }
+        return data
     }
 }

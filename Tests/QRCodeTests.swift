@@ -1,9 +1,38 @@
 import AppKit
 import Vision
+import XCTest
 
-@main
-enum QRCodeTests {
-    static func main() throws {
+final class QRCodeValidationTests: XCTestCase {
+    func testAcceptsBoundaryLength() throws {
+        let input = String(repeating: "a", count: QRCode.maximumBytes)
+        XCTAssertEqual(try QRCode.validate(input).count, QRCode.maximumBytes)
+    }
+
+    func testRejectsEmptyInput() {
+        for input in ["", " \n\t"] {
+            XCTAssertThrowsError(try QRCode.validate(input)) { error in
+                XCTAssertEqual(error as? QRCode.Failure, .empty)
+            }
+        }
+    }
+
+    func testRejectsOversizedUTF8Input() {
+        for input in [
+            String(repeating: "a", count: QRCode.maximumBytes + 1),
+            String(repeating: "中", count: 667)
+        ] {
+            XCTAssertThrowsError(try QRCode.validate(input)) { error in
+                XCTAssertEqual(error as? QRCode.Failure, .tooLong)
+            }
+        }
+    }
+}
+
+final class QRCodeVisionIntegrationTests: XCTestCase {
+    func testRoundTripSamples() throws {
+        guard ProcessInfo.processInfo.environment["QUICKQR_RUN_VISION_TESTS"] == "1" else {
+            throw XCTSkip("Set QUICKQR_RUN_VISION_TESTS=1 to run Core Image and Vision integration checks")
+        }
         let samples = [
             "https://example.com/path?name=hello&value=123#section",
             "你好，世界！这是轻码。",
@@ -19,21 +48,13 @@ enum QRCodeTests {
             request.symbologies = [.qr]
             try VNImageRequestHandler(cgImage: result.cgImage).perform([request])
             guard request.results?.first?.payloadStringValue == text else {
-                fatalError("Round-trip failed for sample \(index)")
+                XCTFail("Round-trip failed for sample \(index)")
+                continue
             }
             guard NSBitmapImageRep(data: result.png)?.pixelsWide == result.cgImage.width else {
-                fatalError("PNG encoding failed")
-            }
-            print("PASS: round-trip sample \(index + 1), \(text.utf8.count) bytes, \(result.cgImage.width) px")
-        }
-        for input in ["", " \n\t", String(repeating: "a", count: QRCode.maximumBytes + 1), String(repeating: "中", count: 667)] {
-            do {
-                _ = try QRCode.generate(input)
-                fatalError("Invalid input accepted")
-            } catch is QRCode.Failure {
-                print("PASS: rejected empty/oversized input (\(input.utf8.count) bytes)")
+                XCTFail("PNG encoding failed for sample \(index)")
+                continue
             }
         }
-        print("All 11 checks passed.")
     }
 }

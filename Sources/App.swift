@@ -3,22 +3,42 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private let accent = Color(red: 0.12, green: 0.49, blue: 0.38)
+private let contentWidth: CGFloat = 368
 
 @MainActor
 final class QRModel: ObservableObject {
     @Published var text = ""
+    @Published var inputFocusRequest = 0
     @Published var result: QRCode.Result?
     @Published var error: String?
     @Published var notice: String?
+    private var generationTask: Task<Void, Never>?
     private var noticeTask: Task<Void, Never>?
 
     func generate() {
+        generationTask?.cancel()
         notice = nil
         error = nil
         result = nil
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        do { result = try QRCode.generate(text) }
-        catch { self.error = error.localizedDescription }
+        let input = text
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        generationTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 150_000_000)
+                try Task.checkCancellation()
+                let generated = try await Task.detached(priority: .userInitiated) {
+                    try QRCode.generate(input)
+                }.value
+                try Task.checkCancellation()
+                guard self?.text == input else { return }
+                self?.result = generated
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled, self?.text == input else { return }
+                self?.error = error.localizedDescription
+            }
+        }
     }
 
     func paste() {
@@ -69,7 +89,6 @@ final class QRModel: ObservableObject {
 
 struct ContentView: View {
     @ObservedObject var model: QRModel
-    @FocusState private var inputFocused: Bool
 
     var body: some View {
         VStack(spacing: 18) {
@@ -102,13 +121,13 @@ struct ContentView: View {
                 HStack {
                     Text("文字或链接").font(.system(size: 12, weight: .medium))
                     Spacer()
-                    Button { model.paste(); inputFocused = true } label: {
+                    Button { model.paste(); model.inputFocusRequest += 1 } label: {
                         Label("粘贴", systemImage: "doc.on.clipboard")
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(accent)
                     .font(.system(size: 11, weight: .medium))
-                    Button { model.text = ""; inputFocused = true } label: {
+                    Button { model.text = ""; model.inputFocusRequest += 1 } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
@@ -116,22 +135,7 @@ struct ContentView: View {
                     .help("清空内容")
                     .accessibilityLabel("清空内容")
                 }
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $model.text)
-                        .font(.system(size: 13))
-                        .scrollContentBackground(.hidden)
-                        .padding(7)
-                        .focused($inputFocused)
-                        .accessibilityLabel("二维码内容")
-                    if model.text.isEmpty {
-                        Text("粘贴链接，或写下想分享的内容…")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 15)
-                            .allowsHitTesting(false)
-                    }
-                }
+                TextInput(text: $model.text, focusRequest: model.inputFocusRequest)
                 .frame(height: 96)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.09)))
@@ -202,10 +206,10 @@ struct ContentView: View {
             .accessibilityElement(children: .combine)
         }
         .padding(22)
-        .frame(width: 368)
+        .frame(width: contentWidth)
         .background(Color(nsColor: .windowBackgroundColor))
         .onChange(of: model.text) { _ in model.generate() }
-        .onAppear { inputFocused = true }
+        .onAppear { model.inputFocusRequest += 1 }
     }
 }
 
@@ -228,7 +232,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: ContentView(model: model))
+        let hostingController = NSHostingController(rootView: ContentView(model: model))
+        let contentSize = hostingController.sizeThatFits(
+            in: NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
+        )
+        hostingController.preferredContentSize = contentSize
+        popover.contentViewController = hostingController
+        popover.contentSize = contentSize
         DispatchQueue.main.async { self.showPopover() }
     }
 

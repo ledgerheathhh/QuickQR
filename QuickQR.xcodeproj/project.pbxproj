@@ -9,6 +9,12 @@
 /* Begin PBXBuildFile section */
 		A10000000000000000000011 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* App.swift */; };
 		A10000000000000000000012 /* QRCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* QRCode.swift */; };
+		A10000000000000000000013 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* AppIcon.icns */; };
+		A10000000000000000000014 /* QRCodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* QRCodeTests.swift */; };
+		A10000000000000000000015 /* QRCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* QRCode.swift */; };
+		A10000000000000000000016 /* TextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* TextInput.swift */; };
+		A10000000000000000000017 /* TextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* TextInput.swift */; };
+		A10000000000000000000018 /* TextInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* TextInputTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -16,10 +22,22 @@
 		A10000000000000000000001 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000004 /* QuickQR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuickQR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000005 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		A10000000000000000000006 /* QRCodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000007 /* QuickQRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QuickQRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000008 /* TextInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInput.swift; sourceTree = "<group>"; };
+		A10000000000000000000009 /* TextInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000000000000000000022 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000026 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +51,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000031 /* Sources */,
+				A10000000000000000000033 /* Tests */,
+				A10000000000000000000034 /* Resources */,
 				A10000000000000000000003 /* Info.plist */,
 				A10000000000000000000032 /* Products */,
 			);
@@ -43,6 +63,7 @@
 			children = (
 				A10000000000000000000001 /* App.swift */,
 				A10000000000000000000002 /* QRCode.swift */,
+				A10000000000000000000008 /* TextInput.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -51,8 +72,26 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000004 /* QuickQR.app */,
+				A10000000000000000000007 /* QuickQRTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000033 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000006 /* QRCodeTests.swift */,
+				A10000000000000000000009 /* TextInputTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000034 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000005 /* AppIcon.icns */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -74,6 +113,23 @@
 			productName = QuickQR;
 			productReference = A10000000000000000000004 /* QuickQR.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000025 /* QuickQRTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000053 /* Build configuration list for PBXNativeTarget "QuickQRTests" */;
+			buildPhases = (
+				A10000000000000000000026 /* Frameworks */,
+				A10000000000000000000027 /* Sources */,
+				A10000000000000000000028 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QuickQRTests;
+			productName = QuickQRTests;
+			productReference = A10000000000000000000007 /* QuickQRTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -98,12 +154,21 @@
 			projectRoot = "";
 			targets = (
 				A10000000000000000000021 /* QuickQR */,
+				A10000000000000000000025 /* QuickQRTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A10000000000000000000024 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000013 /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000028 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -119,6 +184,18 @@
 			files = (
 				A10000000000000000000011 /* App.swift in Sources */,
 				A10000000000000000000012 /* QRCode.swift in Sources */,
+				A10000000000000000000016 /* TextInput.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000027 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000015 /* QRCode.swift in Sources */,
+				A10000000000000000000014 /* QRCodeTests.swift in Sources */,
+				A10000000000000000000017 /* TextInput.swift in Sources */,
+				A10000000000000000000018 /* TextInputTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -190,6 +267,32 @@
 			};
 			name = Release;
 		};
+		A10000000000000000000045 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = local.quickqr.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000046 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = local.quickqr.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -207,6 +310,15 @@
 			buildConfigurations = (
 				A10000000000000000000043 /* Debug */,
 				A10000000000000000000044 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000053 /* Build configuration list for PBXNativeTarget "QuickQRTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000045 /* Debug */,
+				A10000000000000000000046 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

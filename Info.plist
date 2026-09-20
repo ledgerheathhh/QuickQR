@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key><string>QuickQR</string>
-    <key>CFBundleIdentifier</key><string>local.qingma.QRBar</string>
+    <key>CFBundleIdentifier</key><string>local.quickqr.app</string>
     <key>CFBundleName</key><string>QuickQR</string>
     <key>CFBundleDisplayName</key><string>QuickQR</string>
     <key>CFBundlePackageType</key><string>APPL</string>

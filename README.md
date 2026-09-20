@@ -1,87 +1,101 @@
 # QuickQR
 
-一个原生 macOS 状态栏二维码生成器，使用 SwiftUI、AppKit 和系统 Core Image，无第三方依赖。
+A native macOS menu bar QR code generator, built with SwiftUI, AppKit, and the system Core Image, with no third-party dependencies.
 
-## 使用
+## Usage
 
-1. 按下文从源码构建后，双击 `dist/QuickQR.app`，或将它拖到「应用程序」后打开。已安装旧版「轻码」时，先退出旧应用，再使用新版。
-2. 点击屏幕顶部状态栏的二维码图标，输入文字或链接，也可以点击「粘贴」。
-3. 二维码随输入自动更新，点击「复制图片」或「保存 PNG」。
-4. 点击弹窗外部收起，内容保留到退出应用；右键状态栏图标可退出。
+1. After building from source as described below, double-click `dist/QuickQR.app`, or drag it into "Applications" and open it. If an older 「轻码」 build is installed, quit the old app first, then use the new version.
+2. Click the QR code icon in the menu bar at the top of the screen, and enter text or a link, or click "Paste".
+3. The QR code updates automatically a moment after you stop typing; click "Copy Image" or "Save PNG".
+4. Click outside the popover to dismiss it; the content is kept until you quit the app. Right-click the menu bar icon to quit.
 
-应用不显示 Dock 图标。所有内容在本地生成，不联网、不记录历史，不会主动读取剪贴板；仅点击粘贴或使用系统粘贴快捷键时读取。输入保留原始换行及首尾空格，空白内容不生成二维码。
+The app shows no Dock icon. All content is generated locally: it does not connect to the network, keeps no history, and never reads the clipboard on its own; it reads the clipboard only when you click Paste or use the system paste shortcut. Input preserves original line breaks and leading/trailing spaces, and blank content produces no QR code.
 
-快捷键在弹窗打开时可用：
+Keyboard shortcuts are available while the popover is open:
 
-| 操作 | 快捷键 |
+| Action | Shortcut |
 | --- | --- |
-| 粘贴文本 | ⌘V |
-| 全选文本 | ⌘A |
-| 复制二维码图片 | ⇧⌘C |
-| 保存 PNG | ⌘S |
-| 退出 | ⌘Q |
+| Paste text | ⌘V |
+| Select all text | ⌘A |
+| Copy QR code image | ⇧⌘C |
+| Save PNG | ⌘S |
+| Quit | ⌘Q |
 
-如需开机启动，可自行将应用加入 macOS 的「登录项」。本版本不会修改系统登录项。
+If you want the app to launch at login, you can add it to macOS "Login Items" yourself. This version does not modify system login items.
 
-## 输出和限制
+## Output and limits
 
-- UTF-8 文本，最多 2,000 字节，中文和表情通常占多个字节。
-- PNG 使用黑色码点、白色背景、四模块静区及 M 级纠错；按整数倍放大，输出边长随内容变化，通常接近 1,024 像素。
-- 内容越长，二维码越密集；扫描较长内容时建议保存图片后放大。
-- 随附应用为 Universal 通用版本，同一个应用包含 Apple Silicon（arm64）和 Intel（x86_64）两种架构，部署目标均为 macOS 13.0 及以上；实际运行验证以本文末尾记录为准。
-- 应用使用本地临时签名，未做 Developer ID 签名或 Apple 公证。适合本机使用；公开分发前需要正式签名、公证并补充目标系统测试。
+- UTF-8 text, up to 2,000 bytes; Chinese characters and emoji usually occupy multiple bytes.
+- The PNG uses black modules, a white background, a four-module quiet zone, and M-level error correction; it is scaled by integer factors, so the output side length varies with the content and is usually close to 1,024 pixels.
+- The longer the content, the denser the QR code; when scanning longer content, it is advisable to save the image and zoom in.
+- The bundled app is a Universal build: the same app contains both Apple Silicon (arm64) and Intel (x86_64) architectures, and the deployment target for both is macOS 13.0 or later; the actual runtime verification is as recorded at the end of this document.
+- The app uses a local ad-hoc signature, with no Developer ID signing or Apple notarization. It is suitable for local use; public distribution requires formal signing, notarization, and additional testing on target systems.
 
-## 在 Xcode 中运行
+## Running in Xcode
 
-仓库已包含 `QuickQR.xcodeproj` 和共享 Scheme。双击 `QuickQR.xcodeproj`，选择 `QuickQR` Scheme 与 `My Mac`，按 `⌘R` 即可运行。
+The repository already contains `QuickQR.xcodeproj` and a shared scheme. Double-click `QuickQR.xcodeproj`, select the `QuickQR` scheme and `My Mac`, and press `⌘R` to run.
 
-运行后不会出现普通窗口，二维码图标会出现在 macOS 顶部状态栏。点击图标打开弹窗；停止运行使用 `⌘.`。
+After launching, no ordinary window appears; the QR code icon appears in the macOS menu bar. Click the icon to open the popover; press `⌘.` to stop running. Press `⌘U` to run the default unit tests.
 
-项目使用 macOS 13.0 最低部署版本，不需要第三方依赖或 Apple Developer Team。Xcode 会使用本地临时签名运行；如果 Xcode 要求选择 Team，可在 Target → Signing & Capabilities 中关闭自动签名，或保持本机临时签名设置。
+The project uses macOS 13.0 as its minimum deployment version and requires no third-party dependencies or Apple Developer Team. Xcode will run it with a local ad-hoc signature; if Xcode asks you to choose a Team, you can turn off automatic signing under Target → Signing & Capabilities, or keep the local ad-hoc signing settings.
 
-## 从命令行构建
+## Building from the command line
 
-安装 Apple Command Line Tools 或 Xcode 后，在源码目录执行：
+After installing Apple Command Line Tools or Xcode, run the following in the source directory:
 
 ```sh
 bash build.sh
 ```
 
-构建脚本分别编译 arm64 和 x86_64，再用 `lipo` 合并为 `dist/QuickQR.app` 并签名。可传入输出目录：
+The build script compiles arm64 and x86_64 separately, then uses `lipo` to merge them into `dist/QuickQR.app`, copies the fixed app icon, and signs it. You can pass in an output directory:
 
 ```sh
 bash build.sh /path/to/output
 ```
 
-脚本使用 Apple SDK 和 Swift 编译器；安装了 `/Applications/Xcode.app` 时优先使用其中包含完整双架构兼容库的 Swift 工具链，否则使用 Command Line Tools。SDK 路径支持通过 `DEVELOPER_DIR` 指定。无需安装第三方包，也不需要联网。
+The script uses the Apple SDK and the Swift compiler; when `/Applications/Xcode.app` is installed, it prefers the Swift toolchain bundled there, which contains complete dual-architecture compatibility libraries, and otherwise uses the Command Line Tools. The SDK path can be specified through `DEVELOPER_DIR`. No third-party packages need to be installed, and no network access is required.
 
-在可访问系统图形服务的普通 macOS 终端中，执行 `bash test.sh` 可运行独立的扫码回读测试。构建和运行测试分开，避免受限执行环境中的图形服务限制阻断应用打包。
+After installing the full Xcode, running `bash test.sh` runs the stable input-validation unit tests through the shared scheme. Core Image and Vision read-back are graphics integration tests and are skipped by default; run them explicitly in an ordinary macOS terminal that has access to the system graphics services:
 
-## 文件
+```sh
+QUICKQR_RUN_VISION_TESTS=1 bash test.sh
+```
 
-- `Sources/App.swift`：状态栏、弹窗、剪贴板和文件保存。
-- `Sources/QRCode.swift`：二维码生成、静区及 PNG 编码。
-- `QuickQR.xcodeproj`：可直接在 Xcode 中运行的 macOS App 项目。
-- `Tests/QRCodeTests.swift`：通过 Apple Vision 回读链接、中文、表情、换行、空格、单字符和上限内容，并验证空白和超限输入被拒绝。
-- `scripts/MakeIcon.swift`：生成应用图标。
-- `Info.plist`：应用包配置。
+Builds and graphics integration tests are kept separate, so that graphics services in a restricted execution environment cannot block app packaging.
 
-## 验证记录
+## Files
 
-1.1 版（QuickQR）更新验证：
+- `Sources/App.swift`: menu bar, popover, clipboard, and file saving.
+- `Sources/QRCode.swift`: QR code generation, quiet zone, and PNG encoding.
+- `QuickQR.xcodeproj`: macOS app project that can be run directly in Xcode.
+- `Tests/QRCodeTests.swift`: uses XCTest to precisely verify input boundaries, and provides Apple Vision read-back tests that can be explicitly enabled.
+- `Resources/AppIcon.icns`: the fixed app icon shared by the Xcode and script builds.
+- `scripts/MakeIcon.swift`: source-generation tool for the app icon.
+- `Info.plist`: app bundle configuration.
 
-- 应用包、主程序、弹窗标题、菜单和状态栏提示统一使用英文名称 QuickQR，功能文案保留中文。
-- arm64 和 x86_64 均成功编译；使用本机 Xcode 完整 Swift 工具链构建，避免当前 Command Line Tools 缺少 x86_64 兼容库的警告。
-- `lipo` 确认主程序同时包含 `x86_64 arm64`；`vtool` 确认两种架构的最低系统版本均为 macOS 13.0。
-- 应用包配置、构建脚本语法和签名严格校验通过。
-- 本次仅修改名称和构建打包，未改变二维码生成逻辑；未重新进行界面测试，未在 Intel 实机上运行验证。
+## Verification records
 
-1.0 版在 Apple Silicon、macOS 27.0 上验证（以下界面记录来自更名前的「轻码」）：
+Verification of the current unreleased fixes:
 
-- 原生 Swift 编译成功；应用包 `Info.plist` 校验和临时签名严格校验通过。
-- 实际启动应用并检查状态栏弹窗；文字输入区、二维码预览和操作按钮正常显示，当前系统深色外观下布局正常。
-- 通过系统粘贴输入 `https://example.com/你好?from=轻码`，界面保留完整中文链接并实时生成二维码。
-- 点击「复制图片」后，应用显示复制成功。
-- 通过系统文件对话框保存 PNG 成功；检查导出文件为 1014 × 1014 像素 PNG。
-- 自动化回读测试未通过本次受限命令行环境验证：Core Image 的 `createCGImage` 返回 `nil`（默认与 CPU 渲染均如此），而同一生成代码在实际应用中正常运行。对导出图片的独立 Vision 回读也遇到 `com.apple.Vision Code=9: Could not build inference plan`。不能据此声称 11 项回读检查通过。
-- 尚未使用手机实扫，也未验证其他 macOS 版本、Intel Mac 或跨应用图片粘贴兼容性。
+- Both the Xcode Release build and `build.sh` build successfully; the bundle identifier is uniformly `local.quickqr.app`, and the artifacts contain the same app icon.
+- Both build paths produce an `x86_64 arm64` Universal main executable, and the minimum system version is macOS 13.0 for both.
+- `bash test.sh` passes 3 input-validation tests; the graphics integration tests are skipped by default.
+- Running the graphics integration tests explicitly in the current restricted execution environment still returns a generation failure from Core Image; Vision read-back and UI regression need to be completed in an ordinary macOS graphics session.
+
+Version 1.1 (QuickQR) update verification:
+
+- The app bundle, main executable, popover title, menus, and menu bar tooltip uniformly use the English name QuickQR, while the functional copy remains in Chinese.
+- Both arm64 and x86_64 compile successfully; the build used the complete Swift toolchain from the local Xcode, avoiding the warning that the current Command Line Tools lack x86_64 compatibility libraries.
+- `lipo` confirms that the main executable contains both `x86_64 arm64`; `vtool` confirms that the minimum system version for both architectures is macOS 13.0.
+- The app bundle configuration, build script syntax, and signature pass strict validation.
+- This change only modified the name and the build packaging and did not change the QR code generation logic; no UI testing was repeated, and no verification was run on a real Intel machine.
+
+Version 1.0 was verified on Apple Silicon, macOS 27.0 (the UI records below come from 「轻码」 before the rename):
+
+- Native Swift compilation succeeded; the app bundle `Info.plist` validation and the ad-hoc signature passed strict validation.
+- The app was actually launched and the menu bar popover was inspected; the text input area, QR code preview, and action buttons displayed correctly, and the layout was fine under the current system dark appearance.
+- Through system paste, `https://example.com/你好?from=轻码` was entered; the interface preserved the complete Chinese link and generated the QR code in real time.
+- After clicking "Copy Image", the app showed that the copy succeeded.
+- Saving a PNG through the system file dialog succeeded; the exported file was checked and is a 1014 × 1014 pixel PNG.
+- The automated read-back tests did not pass verification in this restricted command-line environment: Core Image's `createCGImage` returned `nil` (both by default and with CPU rendering), whereas the same generation code runs normally in the actual app. Independent Vision read-back of the exported image also encountered `com.apple.Vision Code=9: Could not build inference plan`. It therefore cannot be claimed that the 11 read-back checks passed.
+- The code has not yet been scanned with a real phone, and other macOS versions, Intel Macs, or cross-app image paste compatibility have not been verified.
