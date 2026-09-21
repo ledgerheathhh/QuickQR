@@ -12,8 +12,14 @@ final class QRModel: ObservableObject {
     @Published var result: QRCode.Result?
     @Published var error: String?
     @Published var notice: String?
+    @Published var showsHistory = false
+    let history: QRHistoryStore
     private var generationTask: Task<Void, Never>?
     private var noticeTask: Task<Void, Never>?
+
+    init(history: QRHistoryStore? = nil) {
+        self.history = history ?? QRHistoryStore()
+    }
 
     func generate() {
         generationTask?.cancel()
@@ -32,6 +38,11 @@ final class QRModel: ObservableObject {
                 try Task.checkCancellation()
                 guard self?.text == input else { return }
                 self?.result = generated
+                // Keep normal typing from filling history with every intermediate value.
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+                try Task.checkCancellation()
+                guard self?.text == input else { return }
+                self?.history.record(input)
             } catch is CancellationError {
                 return
             } catch {
@@ -47,6 +58,16 @@ final class QRModel: ObservableObject {
             return
         }
         text = value
+    }
+
+    func clear() {
+        text = ""
+        inputFocusRequest += 1
+    }
+
+    func restore(_ entry: QRHistoryEntry) {
+        text = entry.text
+        inputFocusRequest += 1
     }
 
     func copyImage() {
@@ -103,8 +124,18 @@ struct ContentView: View {
                     Text("随手输入，扫码即达").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button {
+                    model.showsHistory.toggle()
+                } label: {
+                    Image(systemName: model.showsHistory ? "qrcode" : "clock.arrow.circlepath")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(model.showsHistory ? "返回生成器" : "历史记录")
+                .accessibilityLabel(model.showsHistory ? "返回生成器" : "历史记录")
                 Menu {
-                    Text("QuickQR 1.1 · 本地生成")
+                    Text("QuickQR 1.2 · 本地生成")
                     Divider()
                     Button("退出 QuickQR", action: { NSApp.terminate(nil) }).keyboardShortcut("q")
                 } label: {
@@ -117,6 +148,24 @@ struct ContentView: View {
                 .accessibilityLabel("更多选项")
             }
 
+            if model.showsHistory {
+                HistoryView(history: model.history) { entry in
+                    model.restore(entry)
+                    model.showsHistory = false
+                }
+            } else {
+                generator
+            }
+        }
+        .padding(22)
+        .frame(width: contentWidth)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onChange(of: model.text) { _ in model.generate() }
+        .onAppear { model.inputFocusRequest += 1 }
+    }
+
+    private var generator: some View {
+        VStack(spacing: 18) {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
                     Text("文字或链接").font(.system(size: 12, weight: .medium))
@@ -127,7 +176,7 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(accent)
                     .font(.system(size: 11, weight: .medium))
-                    Button { model.text = ""; model.inputFocusRequest += 1 } label: {
+                    Button(action: model.clear) {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
@@ -205,11 +254,82 @@ struct ContentView: View {
             .frame(height: 26)
             .accessibilityElement(children: .combine)
         }
-        .padding(22)
-        .frame(width: contentWidth)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .onChange(of: model.text) { _ in model.generate() }
-        .onAppear { model.inputFocusRequest += 1 }
+    }
+}
+
+private struct HistoryView: View {
+    @ObservedObject var history: QRHistoryStore
+    let onSelect: (QRHistoryEntry) -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("历史记录")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Button("清空", role: .destructive, action: history.removeAll)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(history.entries.isEmpty ? Color.secondary : Color.red)
+                    .disabled(history.entries.isEmpty)
+            }
+
+            if history.entries.isEmpty {
+                Spacer()
+                VStack(spacing: 12) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 42, weight: .ultraLight))
+                        .foregroundStyle(accent.opacity(0.45))
+                    Text("还没有历史记录")
+                        .font(.system(size: 13, weight: .medium))
+                    Text("成功生成的内容会自动保存在这里")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(history.entries) { entry in
+                            HStack(spacing: 10) {
+                                Button { onSelect(entry) } label: {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(entry.text)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.leading)
+                                        Text(entry.createdAt, style: .relative)
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+
+                                Button { history.remove(entry) } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("删除这条记录")
+                                .accessibilityLabel("删除这条记录")
+                            }
+                            .padding(11)
+                            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 5) {
+                Image(systemName: "lock.shield")
+                Text("最多保留 20 条 · 仅存储在本机")
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+        }
+        .frame(height: 491)
     }
 }
 
@@ -239,7 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostingController.preferredContentSize = contentSize
         popover.contentViewController = hostingController
         popover.contentSize = contentSize
-        DispatchQueue.main.async { self.showPopover() }
+        showInitialPopoverWhenReady()
     }
 
     private func installEditingMenu() {
@@ -286,7 +406,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openPopover() { showPopover() }
 
+    private func showInitialPopoverWhenReady(
+        previousAnchor: NSRect? = nil,
+        attemptsRemaining: Int = 20
+    ) {
+        guard let button = item.button, let window = button.window else {
+            retryInitialPopover(previousAnchor: nil, attemptsRemaining: attemptsRemaining)
+            return
+        }
+        button.layoutSubtreeIfNeeded()
+        let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
+        let isValid = anchor.width > 0 && anchor.height > 0
+            && window.screen?.frame.intersects(anchor) == true
+        if isValid, anchor == previousAnchor {
+            showPopover()
+        } else {
+            retryInitialPopover(
+                previousAnchor: isValid ? anchor : nil,
+                attemptsRemaining: attemptsRemaining
+            )
+        }
+    }
+
+    private func retryInitialPopover(previousAnchor: NSRect?, attemptsRemaining: Int) {
+        guard attemptsRemaining > 0 else {
+            showPopover()
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.showInitialPopoverWhenReady(
+                previousAnchor: previousAnchor,
+                attemptsRemaining: attemptsRemaining - 1
+            )
+        }
+    }
+
     private func showPopover() {
+        guard !popover.isShown else { return }
         guard let button = item.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)

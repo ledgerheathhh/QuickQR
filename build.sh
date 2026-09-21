@@ -24,7 +24,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 for ARCH in arm64 x86_64; do
     echo "Building $ARCH..."
     "$SWIFTC" "${FLAGS[@]}" -target "${ARCH}-apple-macosx13.0" -O -parse-as-library \
-        "$ROOT/Sources/QRCode.swift" "$ROOT/Sources/TextInput.swift" "$ROOT/Sources/App.swift" -o "$BUILD/QuickQR-$ARCH"
+        "$ROOT/Sources/QRCode.swift" "$ROOT/Sources/History.swift" \
+        "$ROOT/Sources/TextInput.swift" "$ROOT/Sources/App.swift" -o "$BUILD/QuickQR-$ARCH"
 done
 xcrun lipo -create "$BUILD/QuickQR-arm64" "$BUILD/QuickQR-x86_64" -output "$APP/Contents/MacOS/QuickQR"
 xcrun lipo "$APP/Contents/MacOS/QuickQR" -verify_arch arm64

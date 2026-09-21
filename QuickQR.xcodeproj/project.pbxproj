@@ -15,6 +15,9 @@
 		A10000000000000000000016 /* TextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* TextInput.swift */; };
 		A10000000000000000000017 /* TextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* TextInput.swift */; };
 		A10000000000000000000018 /* TextInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* TextInputTests.swift */; };
+		A10000000000000000000019 /* History.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* History.swift */; };
+		A1000000000000000000001A /* History.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* History.swift */; };
+		A1000000000000000000001B /* HistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B /* HistoryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,6 +30,8 @@
 		A10000000000000000000007 /* QuickQRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QuickQRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000008 /* TextInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInput.swift; sourceTree = "<group>"; };
 		A10000000000000000000009 /* TextInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputTests.swift; sourceTree = "<group>"; };
+		A1000000000000000000000A /* History.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = History.swift; sourceTree = "<group>"; };
+		A1000000000000000000000B /* HistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,6 +67,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000001 /* App.swift */,
+				A1000000000000000000000A /* History.swift */,
 				A10000000000000000000002 /* QRCode.swift */,
 				A10000000000000000000008 /* TextInput.swift */,
 			);
@@ -80,6 +86,7 @@
 		A10000000000000000000033 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				A1000000000000000000000B /* HistoryTests.swift */,
 				A10000000000000000000006 /* QRCodeTests.swift */,
 				A10000000000000000000009 /* TextInputTests.swift */,
 			);
@@ -183,6 +190,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000011 /* App.swift in Sources */,
+				A10000000000000000000019 /* History.swift in Sources */,
 				A10000000000000000000012 /* QRCode.swift in Sources */,
 				A10000000000000000000016 /* TextInput.swift in Sources */,
 			);
@@ -192,6 +200,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1000000000000000000001A /* History.swift in Sources */,
+				A1000000000000000000001B /* HistoryTests.swift in Sources */,
 				A10000000000000000000015 /* QRCode.swift in Sources */,
 				A10000000000000000000014 /* QRCodeTests.swift in Sources */,
 				A10000000000000000000017 /* TextInput.swift in Sources */,

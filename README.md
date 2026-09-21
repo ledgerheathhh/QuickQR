@@ -7,9 +7,10 @@ A native macOS menu bar QR code generator, built with SwiftUI, AppKit, and the s
 1. After building from source as described below, double-click `dist/QuickQR.app`, or drag it into "Applications" and open it. If an older 「轻码」 build is installed, quit the old app first, then use the new version.
 2. Click the QR code icon in the menu bar at the top of the screen, and enter text or a link, or click "Paste".
 3. The QR code updates automatically a moment after you stop typing; click "Copy Image" or "Save PNG".
-4. Click outside the popover to dismiss it; the content is kept until you quit the app. Right-click the menu bar icon to quit.
+4. Click the history button in the header to reopen any of the latest 20 generated items, or delete records you no longer need.
+5. Click outside the popover to dismiss it; the content is kept until you quit the app. Right-click the menu bar icon to quit.
 
-The app shows no Dock icon. All content is generated locally: it does not connect to the network, keeps no history, and never reads the clipboard on its own; it reads the clipboard only when you click Paste or use the system paste shortcut. Input preserves original line breaks and leading/trailing spaces, and blank content produces no QR code.
+The app shows no Dock icon. All content is generated locally: it does not connect to the network, and its 20-item history stays in the current macOS user's local preferences. It never reads the clipboard on its own; it reads the clipboard only when you click Paste or use the system paste shortcut. Input preserves original line breaks and leading/trailing spaces, and blank content produces no QR code.
 
 Keyboard shortcuts are available while the popover is open:
 
@@ -66,6 +67,7 @@ Builds and graphics integration tests are kept separate, so that graphics servic
 ## Files
 
 - `Sources/App.swift`: menu bar, popover, clipboard, and file saving.
+- `Sources/History.swift`: local, deduplicated 20-item history storage.
 - `Sources/QRCode.swift`: QR code generation, quiet zone, and PNG encoding.
 - `QuickQR.xcodeproj`: macOS app project that can be run directly in Xcode.
 - `Tests/QRCodeTests.swift`: uses XCTest to precisely verify input boundaries, and provides Apple Vision read-back tests that can be explicitly enabled.
@@ -79,8 +81,14 @@ Verification of the current unreleased fixes:
 
 - Both the Xcode Release build and `build.sh` build successfully; the bundle identifier is uniformly `local.quickqr.app`, and the artifacts contain the same app icon.
 - Both build paths produce an `x86_64 arm64` Universal main executable, and the minimum system version is macOS 13.0 for both.
-- `bash test.sh` passes 3 input-validation tests; the graphics integration tests are skipped by default.
+- `bash test.sh` passes 8 unit tests covering input validation, text editing, and local history; the graphics integration test is skipped by default.
 - Running the graphics integration tests explicitly in the current restricted execution environment still returns a generation failure from Core Image; Vision read-back and UI regression need to be completed in an ordinary macOS graphics session.
+
+Version 1.2 update verification:
+
+- The first-launch popover waits for a valid, stable menu-bar anchor before opening; launch and relaunch checks showed it attached below the QuickQR status item.
+- Generated content is stored in a local, deduplicated 20-item history. The history UI, restore action, and persistence across an app relaunch were verified with the packaged app.
+- The packaged app remains a signed Universal binary containing `x86_64 arm64`.
 
 Version 1.1 (QuickQR) update verification:
 
