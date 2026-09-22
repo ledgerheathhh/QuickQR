@@ -21,8 +21,15 @@ struct TextInput: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? QRTextView else { return }
         context.coordinator.text = $text
-        if textView.string != text {
+        // While an input method is composing, `textView.string` carries candidates the
+        // binding has never seen, and rewriting it here would discard them — which
+        // happens on every SwiftUI update, including the one that publishes a freshly
+        // generated code. An external change to the binding still goes through, but
+        // uncommitted composition is left alone.
+        let isExternalChange = text != context.coordinator.lastReported
+        if textView.string != text, !textView.hasMarkedText() || isExternalChange {
             textView.string = text
+            context.coordinator.lastReported = text
             textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
             textView.scrollRangeToVisible(textView.selectedRange())
             textView.needsDisplay = true
@@ -36,11 +43,15 @@ struct TextInput: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
         var focusRequest: Int?
+        /// The last value this coordinator wrote into the binding, so that a change
+        /// arriving from outside can be told apart from uncommitted composition.
+        var lastReported = ""
 
         init(text: Binding<String>) { self.text = text }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
+            lastReported = textView.string
             text.wrappedValue = textView.string
             textView.needsDisplay = true
         }

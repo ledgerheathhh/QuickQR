@@ -3,7 +3,34 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private let accent = Color(red: 0.12, green: 0.49, blue: 0.38)
-private let contentWidth: CGFloat = 368
+/// The popover's content width. Internal rather than private so `render-appearance.sh`
+/// measures the views at exactly the width the app lays them out at.
+let contentWidth: CGFloat = 368
+/// Height of the history page, tuned to match the generator page exactly — the two
+/// branches have to measure the same, or the popover resizes when the header button
+/// toggles between them. 44 (padding) + 44 (header) + 18 (spacing) + 483 = 589, which
+/// is what the generator page measures.
+///
+/// Measure this by hosting both pages in a real `NSPopover` and reading the window
+/// height, which is the content height plus 26: both pages have to give 394x615. The
+/// generator page is the one to match, because its height comes from its own content
+/// and this constant cannot move it. `render-appearance.sh` checks the pair.
+private let historyHeight: CGFloat = 483
+
+/// The brand green for text and glyphs. `accent` is tuned for a light surface —
+/// 5.0:1 against white, but only 3.3:1 against the dark window — so the dark
+/// appearance gets a lifted variant at 6.8:1. Filled controls keep the deep value
+/// on purpose: a prominent button pairs it with white text, which the light green
+/// cannot carry.
+private func brandColor(_ scheme: ColorScheme) -> Color {
+    scheme == .dark ? Color(red: 0.30, green: 0.72, blue: 0.57) : accent
+}
+
+/// Large decorative brand glyphs. The 45% that softens the mark on a light card
+/// all but erases it on a dark one.
+private func brandGlyphColor(_ scheme: ColorScheme) -> Color {
+    brandColor(scheme).opacity(scheme == .dark ? 0.85 : 0.45)
+}
 
 @MainActor
 final class QRModel: ObservableObject {
@@ -14,6 +41,11 @@ final class QRModel: ObservableObject {
     @Published var notice: String?
     @Published var showsHistory = false
     let history: QRHistoryStore
+    /// Set by the app delegate. Called once a separate window owned by the app —
+    /// the save panel — has closed, so the popover is on screen again before the
+    /// outcome is reported. A `.transient` popover is dismissed by a click outside
+    /// it, and every click in the save panel counts as one.
+    var restorePopover: (() -> Void)?
     private var generationTask: Task<Void, Never>?
     private var noticeTask: Task<Void, Never>?
 
@@ -25,9 +57,14 @@ final class QRModel: ObservableObject {
         generationTask?.cancel()
         notice = nil
         error = nil
-        result = nil
         let input = text
-        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Keep the previous code on screen while the new one is being debounced, so
+        // typing does not flash the placeholder. It is cleared only when there is
+        // nothing left to show: empty input, or a generation that failed.
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            result = nil
+            return
+        }
         generationTask = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 150_000_000)
@@ -47,6 +84,8 @@ final class QRModel: ObservableObject {
                 return
             } catch {
                 guard !Task.isCancelled, self?.text == input else { return }
+                // An error must not leave the code for the previous input on screen.
+                self?.result = nil
                 self?.error = error.localizedDescription
             }
         }
@@ -89,9 +128,23 @@ final class QRModel: ObservableObject {
         panel.prompt = "保存"
         panel.canCreateDirectories = true
         NSApp.activate(ignoringOtherApps: true)
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // Present the panel without blocking, and re-present the popover before
+        // reporting. `runModal()` would sit on the run loop until the user was
+        // done, by which point a transient popover has already been dismissed by
+        // the first click inside the panel — the "saved" notice would have had
+        // nowhere to appear. A sheet is not an option either: it would be attached
+        // to the popover's own window and sized to it.
+        panel.begin { [weak self] response in
+            guard let self else { return }
+            self.restorePopover?()
+            guard response == .OK, let url = panel.url else { return }
+            self.write(result.png, to: url)
+        }
+    }
+
+    private func write(_ png: Data, to url: URL) {
         do {
-            try result.png.write(to: url, options: .atomic)
+            try png.write(to: url, options: .atomic)
             showNotice("二维码已保存")
         } catch {
             showNotice("保存失败：\(error.localizedDescription)")
@@ -110,15 +163,31 @@ final class QRModel: ObservableObject {
 
 struct ContentView: View {
     @ObservedObject var model: QRModel
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var brand: Color { brandColor(colorScheme) }
+    private var glyph: Color { brandGlyphColor(colorScheme) }
+
+    /// The card is white whenever a code is on screen — a camera needs that
+    /// contrast — but with nothing to show there is no reason to hold a 232 pt
+    /// white slab on a dark window. The placeholder borrows the same 4% surface
+    /// tint the history rows use, so it follows the appearance on its own.
+    private var cardFill: Color {
+        model.result != nil ? .white : Color.primary.opacity(0.04)
+    }
+
+    private var cardBorder: Color {
+        model.result != nil ? Color.black.opacity(0.06) : Color.primary.opacity(0.09)
+    }
 
     var body: some View {
         VStack(spacing: 18) {
             HStack(spacing: 11) {
                 Image(systemName: "qrcode")
                     .font(.system(size: 23, weight: .semibold))
-                    .foregroundStyle(accent)
+                    .foregroundStyle(brand)
                     .frame(width: 44, height: 44)
-                    .background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                    .background(brand.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
                 VStack(alignment: .leading, spacing: 3) {
                     Text("QuickQR").font(.system(size: 19, weight: .semibold))
                     Text("随手输入，扫码即达").font(.system(size: 11)).foregroundStyle(.secondary)
@@ -174,7 +243,7 @@ struct ContentView: View {
                         Label("粘贴", systemImage: "doc.on.clipboard")
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(accent)
+                    .foregroundStyle(brand)
                     .font(.system(size: 11, weight: .medium))
                     Button(action: model.clear) {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
@@ -200,7 +269,7 @@ struct ContentView: View {
             }
 
             ZStack {
-                RoundedRectangle(cornerRadius: 16).fill(.white)
+                RoundedRectangle(cornerRadius: 16).fill(cardFill)
                 if let result = model.result {
                     Image(nsImage: result.image)
                         .interpolation(.none)
@@ -212,17 +281,17 @@ struct ContentView: View {
                     VStack(spacing: 12) {
                         Image(systemName: model.error == nil ? "qrcode.viewfinder" : "exclamationmark.circle")
                             .font(.system(size: 49, weight: .ultraLight))
-                            .foregroundStyle(model.error == nil ? accent.opacity(0.45) : Color.orange)
+                            .foregroundStyle(model.error == nil ? glyph : Color.orange)
                         Text(model.error ?? "你的二维码会出现在这里")
                             .font(.system(size: 12))
-                            .foregroundStyle(Color.black.opacity(0.48))
+                            .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
                     }
                 }
             }
             .frame(width: 232, height: 232)
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.black.opacity(0.06)))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(cardBorder))
 
             HStack(spacing: 10) {
                 Button(action: model.copyImage) {
@@ -250,7 +319,7 @@ struct ContentView: View {
                     .lineLimit(2)
             }
             .font(.system(size: 10))
-            .foregroundStyle(model.notice == nil ? Color.secondary : accent)
+            .foregroundStyle(model.notice == nil ? Color.secondary : brand)
             .frame(height: 26)
             .accessibilityElement(children: .combine)
         }
@@ -259,6 +328,7 @@ struct ContentView: View {
 
 private struct HistoryView: View {
     @ObservedObject var history: QRHistoryStore
+    @Environment(\.colorScheme) private var colorScheme
     let onSelect: (QRHistoryEntry) -> Void
 
     var body: some View {
@@ -278,7 +348,7 @@ private struct HistoryView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 42, weight: .ultraLight))
-                        .foregroundStyle(accent.opacity(0.45))
+                        .foregroundStyle(brandGlyphColor(colorScheme))
                     Text("还没有历史记录")
                         .font(.system(size: 13, weight: .medium))
                     Text("成功生成的内容会自动保存在这里")
@@ -329,7 +399,7 @@ private struct HistoryView: View {
             .font(.system(size: 10))
             .foregroundStyle(.secondary)
         }
-        .frame(height: 491)
+        .frame(height: historyHeight)
     }
 }
 
@@ -352,6 +422,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         popover.behavior = .transient
+        model.restorePopover = { [weak self] in
+            // Only while this app still owns the screen. `begin` presents the save
+            // panel as a modeless window, so the user may have moved on to another
+            // app by the time it closes — reopening the popover would steal focus.
+            guard let self, NSApp.isActive else { return }
+            self.showPopover()
+        }
         let hostingController = NSHostingController(rootView: ContentView(model: model))
         let contentSize = hostingController.sizeThatFits(
             in: NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
@@ -389,14 +466,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func togglePopover() {
         if NSApp.currentEvent?.type == .rightMouseUp {
-            let menu = NSMenu()
-            menu.addItem(withTitle: "打开 QuickQR", action: #selector(openPopover), keyEquivalent: "")
-                .target = self
-            menu.addItem(.separator())
-            menu.addItem(withTitle: "退出 QuickQR", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-            item.menu = menu
-            item.button?.performClick(nil)
-            item.menu = nil
+            // The menu opens from the same status item the popover hangs from, so
+            // leaving the popover up would stack the two on top of each other.
+            if popover.isShown { popover.performClose(nil) }
+            presentContextMenu()
         } else if popover.isShown {
             popover.performClose(nil)
         } else {
@@ -404,46 +477,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Opens the right-click menu under the status item.
+    ///
+    /// There is no supported "show this menu now" call on `NSStatusItem`.
+    /// `popUpMenu(_:)` is only the Swift name of the `popUpStatusItemMenu:`
+    /// selector that AppKit deprecated in macOS 10.14, with the advice to use the
+    /// `menu` property instead. So: assign the menu, let the button track it, then
+    /// clear it. Clearing is the part that matters — a status item that owns a
+    /// menu stops calling its action altogether.
+    private func presentContextMenu() {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "打开 QuickQR", action: #selector(openPopover), keyEquivalent: "")
+            .target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "退出 QuickQR", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        item.menu = menu
+        item.button?.performClick(nil)
+        item.menu = nil
+    }
+
     @objc private func openPopover() { showPopover() }
+
+    /// Resolves the status item's on-screen anchor, or `nil` while the status bar
+    /// window is still in its transient, unpositioned state.
+    ///
+    /// A freshly created status item reports a window that already exists but still
+    /// carries the default frame `{{0, 0}, {38, 0}}` until the window server places
+    /// it. Converting through that frame yields an anchor straddling the screen
+    /// origin — the bottom-left corner — which is exactly where the popover would
+    /// then be pinned. The window is also observed mid-flight, below the menu bar or
+    /// hanging off the bottom edge, so every one of these states has to be rejected:
+    /// a zero-height window, an anchor outside its own window, or a window that has
+    /// not reached the top strip of its screen.
+    private func resolvedAnchor() -> NSRect? {
+        guard let button = item.button, let window = button.window else { return nil }
+        button.layoutSubtreeIfNeeded()
+        let frame = window.frame
+        guard frame.width > 0, frame.height > 0, let screen = window.screen else { return nil }
+        let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
+        guard anchor.width > 0, anchor.height > 0, frame.intersects(anchor) else { return nil }
+        // The status bar window occupies the topmost strip of its screen, or sits
+        // just above the top edge while an auto-hiding menu bar stays hidden.
+        guard frame.maxY >= screen.frame.maxY - 1 else { return nil }
+        return anchor
+    }
 
     private func showInitialPopoverWhenReady(
         previousAnchor: NSRect? = nil,
-        attemptsRemaining: Int = 20
+        attempt: Int = 0
     ) {
-        guard let button = item.button, let window = button.window else {
-            retryInitialPopover(previousAnchor: nil, attemptsRemaining: attemptsRemaining)
+        guard !popover.isShown else { return }
+        guard let anchor = resolvedAnchor() else {
+            retryInitialPopover(previousAnchor: nil, attempt: attempt)
             return
         }
-        button.layoutSubtreeIfNeeded()
-        let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
-        let isValid = anchor.width > 0 && anchor.height > 0
-            && window.screen?.frame.intersects(anchor) == true
-        if isValid, anchor == previousAnchor {
+        if anchor == previousAnchor {
             showPopover()
         } else {
-            retryInitialPopover(
-                previousAnchor: isValid ? anchor : nil,
-                attemptsRemaining: attemptsRemaining
-            )
+            retryInitialPopover(previousAnchor: anchor, attempt: attempt)
         }
     }
 
-    private func retryInitialPopover(previousAnchor: NSRect?, attemptsRemaining: Int) {
-        guard attemptsRemaining > 0 else {
-            showPopover()
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.showInitialPopoverWhenReady(
-                previousAnchor: previousAnchor,
-                attemptsRemaining: attemptsRemaining - 1
-            )
+    private func retryInitialPopover(previousAnchor: NSRect?, attempt: Int) {
+        // ~1 s of fast polls covers the normal case; the slower back-off covers
+        // machines where the window server takes longer to place the status item.
+        // Give up rather than open at an anchor that is still untrustworthy.
+        guard attempt < 60 else { return }
+        let delay: TimeInterval = attempt < 20 ? 0.05 : 0.25
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.showInitialPopoverWhenReady(previousAnchor: previousAnchor, attempt: attempt + 1)
         }
     }
 
     private func showPopover() {
         guard !popover.isShown else { return }
         guard let button = item.button else { return }
+        // Never anchor to a status bar window that has not been placed yet: wait for
+        // it instead of pinning the popover to a stale frame.
+        guard resolvedAnchor() != nil else {
+            showInitialPopoverWhenReady()
+            return
+        }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()

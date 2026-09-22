@@ -63,11 +63,31 @@ final class TextInputTests: XCTestCase {
                                replacementRange: NSRange(location: NSNotFound, length: 0))
         refresh(host)
         XCTAssertTrue(textView.hasMarkedText())
+        // Publishing anything re-evaluates the body and so runs updateNSView, which is
+        // what a freshly generated code does in the app. Without this the assertions
+        // below would hold for the wrong reason: updateNSView is never called at all.
+        model.focusRequest += 1
+        refresh(host)
+        XCTAssertTrue(textView.hasMarkedText(), "Composition must survive a SwiftUI update")
+        XCTAssertEqual(textView.string, "ni")
         textView.insertText("你", replacementRange: NSRange(location: NSNotFound, length: 0))
         refresh(host)
         XCTAssertFalse(textView.hasMarkedText())
         XCTAssertEqual(model.text, "你")
         XCTAssertTrue(window.firstResponder === textView)
+    }
+
+    @MainActor
+    func testExternalChangeStillAppliesDuringComposition() throws {
+        let (_, host, model, textView) = try makeInput()
+        textView.setMarkedText("ni", selectedRange: NSRange(location: 2, length: 0),
+                               replacementRange: NSRange(location: NSNotFound, length: 0))
+        refresh(host)
+        XCTAssertTrue(textView.hasMarkedText())
+        model.text = "粘贴的内容"
+        refresh(host)
+        XCTAssertEqual(textView.string, "粘贴的内容", "An external change must still reach the editor")
+        XCTAssertEqual(textView.selectedRange().location, ("粘贴的内容" as NSString).length)
     }
 
     @MainActor

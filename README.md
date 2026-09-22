@@ -64,6 +64,12 @@ QUICKQR_RUN_VISION_TESTS=1 bash test.sh
 
 Builds and graphics integration tests are kept separate, so that graphics services in a restricted execution environment cannot block app packaging.
 
+`bash render-appearance.sh` renders the popover's five states in both system appearances into `dist/appearance/`, without launching the app and without needing screen-recording permission. It compiles a copy of the sources with the app's `@main` entry point removed, so the images come from the real views rather than a reimplementation of them. It also fails if the generator and history pages stop reporting the same height — the property that keeps the popover from resizing when the header button is toggled:
+
+```sh
+bash render-appearance.sh [output-directory]
+```
+
 ## Files
 
 - `Sources/App.swift`: menu bar, popover, clipboard, and file saving.
@@ -72,7 +78,9 @@ Builds and graphics integration tests are kept separate, so that graphics servic
 - `QuickQR.xcodeproj`: macOS app project that can be run directly in Xcode.
 - `Tests/QRCodeTests.swift`: uses XCTest to precisely verify input boundaries, and provides Apple Vision read-back tests that can be explicitly enabled.
 - `Resources/AppIcon.icns`: the fixed app icon shared by the Xcode and script builds.
+- `render-appearance.sh`: renders the popover offscreen in both system appearances, for inspecting a visual change.
 - `scripts/MakeIcon.swift`: source-generation tool for the app icon.
+- `scripts/RenderAppearance.swift`: the view renderer that `render-appearance.sh` compiles against the app's own sources.
 - `Info.plist`: app bundle configuration.
 
 ## Verification records
@@ -81,12 +89,32 @@ Verification of the current unreleased fixes:
 
 - Both the Xcode Release build and `build.sh` build successfully; the bundle identifier is uniformly `local.quickqr.app`, and the artifacts contain the same app icon.
 - Both build paths produce an `x86_64 arm64` Universal main executable, and the minimum system version is macOS 13.0 for both.
-- `bash test.sh` passes 8 unit tests covering input validation, text editing, and local history; the graphics integration test is skipped by default.
-- Running the graphics integration tests explicitly in the current restricted execution environment still returns a generation failure from Core Image; Vision read-back and UI regression need to be completed in an ordinary macOS graphics session.
+- `bash test.sh` passes 9 unit tests covering input validation, text editing, and local history; the graphics integration test is skipped by default.
+- Running the graphics integration tests explicitly (`QUICKQR_RUN_VISION_TESTS=1 bash test.sh`) passes: all seven samples round-trip through Core Image, PNG encoding, and a Vision barcode read-back, and every decoded payload matches its input. The generation failure recorded for 1.0 no longer reproduces in this environment. UI regression still needs a manual pass in an ordinary macOS graphics session.
+
+Second review round (dark appearance, status item menu, save panel):
+
+- `bash build.sh` compiles both architectures with no warnings, and `QUICKQR_RUN_VISION_TESTS=1 bash test.sh` passes all 10 tests, including the Vision round-trip.
+- The QR card is no longer white when there is nothing to show. It stays white only while a code is on screen — a camera needs that contrast — and otherwise uses the same 4% surface tint as the history rows. Both appearances were rendered offscreen through the real view: the dark card resolves to `#262626` on a `#1E1E1E` window, and the light card moves from `#FFFFFF` to `#F6F6F6`.
+- A pixel diff of that render against the previous build confirms the change is confined to the header row and the card. The light generator page with a code on screen is byte-identical, and the history rows are untouched.
+- The brand green used for text and glyphs is lifted in the dark appearance: it measured 3.3:1 against the dark window before and 6.8:1 now. Filled controls deliberately keep the deep green, because a prominent button pairs it with white text and a light green cannot carry that.
+- Right-clicking the status item now closes an open popover first, instead of leaving the context menu and the popover both hanging from the same item. `NSStatusItem` has no supported "show this menu now" call — `popUpMenu(_:)` is the Swift name of the `popUpStatusItemMenu:` selector deprecated in macOS 10.14 — so the assign/track/clear approach is kept, now documented in place.
+- Saving no longer calls `runModal()`. The panel is presented with `begin`, and the popover is re-presented before the result is reported, so "saved" lands in a popover that is actually on screen. The two window levels were checked directly: a popover's window is `_NSPopoverWindow` at level 0, the same as `NSSavePanel`, so the panel is not hidden behind the popover.
+- Which exact click dismisses the transient popover while the modeless panel is up has not been exercised interactively, so the save flow still needs one manual pass on real hardware.
+
+Offscreen render harness, and the popover-height problem it uncovered:
+
+- `bash render-appearance.sh` renders the five popover states in both appearances and fails if the two pages stop measuring the same. Both pages now report 368×589 pt.
+- The harness measures through `NSHostingController.sizeThatFits(in:)`, which is the call the app itself uses to size the popover. `NSHostingView.fittingSize` agrees with it on these views.
+- The generator page's height comes from its own content and cannot be moved by the history constant; it measures 589 pt. The history page is pinned by `historyHeight`, and 44 (padding) + 44 (header) + 18 (spacing) + 483 = 589.
+- Before this change the history branch measured 597 pt, so the packaged app's popover was 394×615 pt on the generator page and grew to 394×623 pt when the history button was clicked. The 615 pt figure was confirmed against the real app: driving the real `AppDelegate` — real status item, real anchor — puts a 394×615 pt popover on screen, and it does so on every run.
+- `historyHeight` is retuned from 491 to 483 so the history branch is 589 pt too. The generator page's on-screen height is unchanged; only the history page stops jumping.
+- One measurement taken during this work reported both pages at 597 pt, which led to the change being reverted and then re-applied. That reading could not be reproduced afterwards, and it disagrees with the two checks that hold up: the real `AppDelegate`'s popover window, and the harness. Both say 589 pt.
 
 Version 1.2 update verification:
 
-- The first-launch popover waits for a valid, stable menu-bar anchor before opening; launch and relaunch checks showed it attached below the QuickQR status item.
+- The first-launch popover waits for the status bar window to be placed before opening. An anchor is rejected while the window still carries its default frame, hangs below the menu bar, or has not reached the top strip of its screen. The previous check accepted a window that had not been placed yet, and could pin the popover to the bottom-left corner of the screen on a machine slow enough to expose it.
+- Launch and relaunch checks on Apple Silicon (macOS 27.0) showed the popover attached below the QuickQR status item; the anchor states that were wrongly accepted were reproduced and rejected by a standalone harness. Intel Macs, multiple displays, and an auto-hiding menu bar have not been re-verified on real hardware.
 - Generated content is stored in a local, deduplicated 20-item history. The history UI, restore action, and persistence across an app relaunch were verified with the packaged app.
 - The packaged app remains a signed Universal binary containing `x86_64 arm64`.
 
@@ -105,5 +133,5 @@ Version 1.0 was verified on Apple Silicon, macOS 27.0 (the UI records below come
 - Through system paste, `https://example.com/你好?from=轻码` was entered; the interface preserved the complete Chinese link and generated the QR code in real time.
 - After clicking "Copy Image", the app showed that the copy succeeded.
 - Saving a PNG through the system file dialog succeeded; the exported file was checked and is a 1014 × 1014 pixel PNG.
-- The automated read-back tests did not pass verification in this restricted command-line environment: Core Image's `createCGImage` returned `nil` (both by default and with CPU rendering), whereas the same generation code runs normally in the actual app. Independent Vision read-back of the exported image also encountered `com.apple.Vision Code=9: Could not build inference plan`. It therefore cannot be claimed that the 11 read-back checks passed.
+- The automated read-back tests did not pass verification in this restricted command-line environment: Core Image's `createCGImage` returned `nil` (both by default and with CPU rendering), whereas the same generation code runs normally in the actual app. Independent Vision read-back of the exported image also encountered `com.apple.Vision Code=9: Could not build inference plan`. It therefore cannot be claimed that the 11 read-back checks passed. Both failures later turned out to be environmental; see the round-trip result recorded above.
 - The code has not yet been scanned with a real phone, and other macOS versions, Intel Macs, or cross-app image paste compatibility have not been verified.
