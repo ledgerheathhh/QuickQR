@@ -38,6 +38,7 @@ struct Scene {
     /// The popover page this scene shows. Both pages have to report the same height,
     /// or the popover resizes when the header button toggles between them.
     let page: String
+    var waitsForGeneration = true
     let configure: @MainActor (QRModel) -> Void
 }
 
@@ -46,15 +47,35 @@ struct Scene {
 var scenes: [Scene] {
     [
         Scene(name: "generator-empty", page: "generator") { _ in },
-        Scene(name: "generator-code", page: "generator") { $0.result = try? QRCode.generate(sample) },
+        Scene(name: "generator-code", page: "generator") { $0.text = sample },
         Scene(name: "generator-error", page: "generator") {
-            $0.error = QRCode.Failure.tooLong.errorDescription
+            $0.text = String(repeating: "a", count: QRCode.maximumBytes + 1)
+        },
+        Scene(name: "generator-updating", page: "generator", waitsForGeneration: false) {
+            $0.text = sample
+            waitForGeneration($0)
+            $0.text = sample + "&updated=1"
+        },
+        Scene(name: "generator-near-limit", page: "generator") { $0.text = String(repeating: "a", count: 1_850) },
+        Scene(name: "copy-success", page: "generator") {
+            $0.showNotice("二维码图片已复制", kind: .success)
+        },
+        Scene(name: "save-failure", page: "generator") {
+            $0.showNotice("保存失败：没有权限写入所选位置", kind: .failure)
+        },
+        Scene(name: "paste-warning", page: "generator") {
+            $0.showNotice("剪贴板中没有可用的文字", kind: .warning)
         },
         Scene(name: "history-empty", page: "history") { $0.showsHistory = true },
         Scene(name: "history-filled", page: "history") {
             $0.history.record(sample)
             $0.history.record("QuickQR 本地生成，内容不会上传")
             $0.history.record("https://developer.apple.com/documentation/appkit")
+            $0.showsHistory = true
+        },
+        Scene(name: "history-deleted", page: "history") {
+            $0.history.record(sample)
+            $0.removeHistory($0.history.entries[0])
             $0.showsHistory = true
         }
     ]
@@ -65,8 +86,13 @@ let appearances: [(label: String, name: NSAppearance.Name)] = [("light", .aqua),
 /// Draws one scene and returns the size the popover would take for it.
 @MainActor
 func render(_ scene: Scene, appearanceName: NSAppearance.Name, to url: URL) -> NSSize? {
+    defaults.removePersistentDomain(forName: defaultsSuite)
     let model = QRModel(history: QRHistoryStore(defaults: defaults, storageKey: "history", limit: 20))
     scene.configure(model)
+    if scene.waitsForGeneration { waitForGeneration(model) }
+    if scene.name == "generator-code" || scene.name == "generator-near-limit" {
+        guard model.canExport else { return nil }
+    }
 
     // Measure and draw through a hosting controller, because that is what the app
     // puts inside its popover — the size measured here is the size the popover takes.
@@ -98,6 +124,14 @@ func render(_ scene: Scene, appearanceName: NSAppearance.Name, to url: URL) -> N
     guard let data = representation.representation(using: .png, properties: [:]) else { return nil }
     do { try data.write(to: url) } catch { return nil }
     return fitting
+}
+
+@MainActor
+func waitForGeneration(_ model: QRModel) {
+    let deadline = Date(timeIntervalSinceNow: 3)
+    while model.isGenerating && Date() < deadline {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
 }
 
 @MainActor

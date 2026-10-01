@@ -57,6 +57,37 @@ final class TextInputTests: XCTestCase {
     }
 
     @MainActor
+    func testExternalClearAndReplacementCanBeUndoneAndRedone() throws {
+        let (_, host, model, textView) = try makeInput()
+        let original = "原始链接 👋\n第二行"
+        textView.insertText(original, replacementRange: NSRange(location: NSNotFound, length: 0))
+        refresh(host)
+        let undo = try XCTUnwrap(textView.undoManager)
+
+        model.text = ""
+        refresh(host)
+        undo.undo()
+        refresh(host)
+        XCTAssertEqual(model.text, original)
+        XCTAssertEqual(textView.string, original)
+        undo.redo()
+        refresh(host)
+        XCTAssertEqual(model.text, "")
+
+        undo.undo()
+        refresh(host)
+        model.text = "替换后的文字"
+        refresh(host)
+        undo.undo()
+        refresh(host)
+        XCTAssertEqual(model.text, original)
+        XCTAssertEqual(textView.string, original)
+        undo.redo()
+        refresh(host)
+        XCTAssertEqual(model.text, "替换后的文字")
+    }
+
+    @MainActor
     func testMarkedTextSurvivesSwiftUIUpdate() throws {
         let (window, host, model, textView) = try makeInput()
         textView.setMarkedText("ni", selectedRange: NSRange(location: 2, length: 0),

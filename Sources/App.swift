@@ -1,21 +1,13 @@
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 private let accent = Color(red: 0.12, green: 0.49, blue: 0.38)
 /// The popover's content width. Internal rather than private so `render-appearance.sh`
 /// measures the views at exactly the width the app lays them out at.
 let contentWidth: CGFloat = 368
-/// Height of the history page, tuned to match the generator page exactly — the two
-/// branches have to measure the same, or the popover resizes when the header button
-/// toggles between them. 44 (padding) + 44 (header) + 18 (spacing) + 483 = 589, which
-/// is what the generator page measures.
-///
-/// Measure this by hosting both pages in a real `NSPopover` and reading the window
-/// height, which is the content height plus 26: both pages have to give 394x615. The
-/// generator page is the one to match, because its height comes from its own content
-/// and this constant cannot move it. `render-appearance.sh` checks the pair.
-private let historyHeight: CGFloat = 483
+/// Match the generator's measured height so page switching never resizes the popover.
+/// `render-appearance.sh` checks the pair in both appearances.
+private let historyHeight: CGFloat = 492
 
 /// The brand green for text and glyphs. `accent` is tuned for a light surface —
 /// 5.0:1 against white, but only 3.3:1 against the dark window — so the dark
@@ -30,135 +22,6 @@ private func brandColor(_ scheme: ColorScheme) -> Color {
 /// all but erases it on a dark one.
 private func brandGlyphColor(_ scheme: ColorScheme) -> Color {
     brandColor(scheme).opacity(scheme == .dark ? 0.85 : 0.45)
-}
-
-@MainActor
-final class QRModel: ObservableObject {
-    @Published var text = ""
-    @Published var inputFocusRequest = 0
-    @Published var result: QRCode.Result?
-    @Published var error: String?
-    @Published var notice: String?
-    @Published var showsHistory = false
-    let history: QRHistoryStore
-    /// Set by the app delegate. Called once a separate window owned by the app —
-    /// the save panel — has closed, so the popover is on screen again before the
-    /// outcome is reported. A `.transient` popover is dismissed by a click outside
-    /// it, and every click in the save panel counts as one.
-    var restorePopover: (() -> Void)?
-    private var generationTask: Task<Void, Never>?
-    private var noticeTask: Task<Void, Never>?
-
-    init(history: QRHistoryStore? = nil) {
-        self.history = history ?? QRHistoryStore()
-    }
-
-    func generate() {
-        generationTask?.cancel()
-        notice = nil
-        error = nil
-        let input = text
-        // Keep the previous code on screen while the new one is being debounced, so
-        // typing does not flash the placeholder. It is cleared only when there is
-        // nothing left to show: empty input, or a generation that failed.
-        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            result = nil
-            return
-        }
-        generationTask = Task { [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: 150_000_000)
-                try Task.checkCancellation()
-                let generated = try await Task.detached(priority: .userInitiated) {
-                    try QRCode.generate(input)
-                }.value
-                try Task.checkCancellation()
-                guard self?.text == input else { return }
-                self?.result = generated
-                // Keep normal typing from filling history with every intermediate value.
-                try await Task.sleep(nanoseconds: 1_000_000_000)
-                try Task.checkCancellation()
-                guard self?.text == input else { return }
-                self?.history.record(input)
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled, self?.text == input else { return }
-                // An error must not leave the code for the previous input on screen.
-                self?.result = nil
-                self?.error = error.localizedDescription
-            }
-        }
-    }
-
-    func paste() {
-        guard let value = NSPasteboard.general.string(forType: .string), !value.isEmpty else {
-            showNotice("剪贴板中没有可用的文字")
-            return
-        }
-        text = value
-    }
-
-    func clear() {
-        text = ""
-        inputFocusRequest += 1
-    }
-
-    func restore(_ entry: QRHistoryEntry) {
-        text = entry.text
-        inputFocusRequest += 1
-    }
-
-    func copyImage() {
-        guard let result else { return }
-        let board = NSPasteboard.general
-        board.clearContents()
-        let item = NSPasteboardItem()
-        item.setData(result.png, forType: .png)
-        if let tiff = result.image.tiffRepresentation { item.setData(tiff, forType: .tiff) }
-        showNotice(board.writeObjects([item]) ? "二维码图片已复制" : "复制失败，请重试")
-    }
-
-    func saveImage() {
-        guard let result else { return }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = "二维码.png"
-        panel.title = "保存二维码"
-        panel.prompt = "保存"
-        panel.canCreateDirectories = true
-        NSApp.activate(ignoringOtherApps: true)
-        // Present the panel without blocking, and re-present the popover before
-        // reporting. `runModal()` would sit on the run loop until the user was
-        // done, by which point a transient popover has already been dismissed by
-        // the first click inside the panel — the "saved" notice would have had
-        // nowhere to appear. A sheet is not an option either: it would be attached
-        // to the popover's own window and sized to it.
-        panel.begin { [weak self] response in
-            guard let self else { return }
-            self.restorePopover?()
-            guard response == .OK, let url = panel.url else { return }
-            self.write(result.png, to: url)
-        }
-    }
-
-    private func write(_ png: Data, to url: URL) {
-        do {
-            try png.write(to: url, options: .atomic)
-            showNotice("二维码已保存")
-        } catch {
-            showNotice("保存失败：\(error.localizedDescription)")
-        }
-    }
-
-    func showNotice(_ message: String) {
-        noticeTask?.cancel()
-        notice = message
-        noticeTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            if !Task.isCancelled { notice = nil }
-        }
-    }
 }
 
 struct ContentView: View {
@@ -199,6 +62,7 @@ struct ContentView: View {
                     Image(systemName: model.showsHistory ? "qrcode" : "clock.arrow.circlepath")
                         .font(.system(size: 17))
                         .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
                 .help(model.showsHistory ? "返回生成器" : "历史记录")
@@ -209,6 +73,7 @@ struct ContentView: View {
                     Button("退出 QuickQR", action: { NSApp.terminate(nil) }).keyboardShortcut("q")
                 } label: {
                     Image(systemName: "ellipsis.circle").font(.system(size: 18)).foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -218,7 +83,7 @@ struct ContentView: View {
             }
 
             if model.showsHistory {
-                HistoryView(history: model.history) { entry in
+                HistoryView(history: model.history, model: model) { entry in
                     model.restore(entry)
                     model.showsHistory = false
                 }
@@ -229,7 +94,12 @@ struct ContentView: View {
         .padding(22)
         .frame(width: contentWidth)
         .background(Color(nsColor: .windowBackgroundColor))
-        .onChange(of: model.text) { _ in model.generate() }
+        .alert("清空所有历史记录？", isPresented: $model.confirmsHistoryClear) {
+            Button("取消", role: .cancel) {}
+            Button("清空", role: .destructive, action: model.clearHistory)
+        } message: {
+            Text("将删除本机保存的全部历史记录，此操作无法撤销。")
+        }
         .onAppear { model.inputFocusRequest += 1 }
     }
 
@@ -239,18 +109,21 @@ struct ContentView: View {
                 HStack {
                     Text("文字或链接").font(.system(size: 12, weight: .medium))
                     Spacer()
-                    Button { model.paste(); model.inputFocusRequest += 1 } label: {
-                        Label("粘贴", systemImage: "doc.on.clipboard")
+                    Button(action: model.paste) {
+                        Label(model.text.isEmpty ? "粘贴" : "粘贴并替换", systemImage: "doc.on.clipboard")
+                            .frame(height: 24)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(brand)
                     .font(.system(size: 11, weight: .medium))
+                    .help(model.text.isEmpty ? "粘贴剪贴板文字" : "替换全部内容，可按 ⌘Z 撤销")
                     Button(action: model.clear) {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
                     .disabled(model.text.isEmpty)
-                    .help("清空内容")
+                    .help("清空内容，可按 ⌘Z 撤销")
                     .accessibilityLabel("清空内容")
                 }
                 TextInput(text: $model.text, focusRequest: model.inputFocusRequest)
@@ -258,25 +131,33 @@ struct ContentView: View {
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.09)))
                 HStack {
-                    Text("输入后自动生成")
+                    Text(inputStatus)
+                        .foregroundStyle(model.text.utf8.count > QRCode.maximumBytes ? Color.red : Color.secondary)
                     Spacer()
                     Text("\(model.text.utf8.count) / 2,000 字节")
-                        .foregroundStyle(model.text.utf8.count > QRCode.maximumBytes ? Color.red : Color.secondary)
+                        .foregroundStyle(model.text.utf8.count > QRCode.maximumBytes ? Color.red :
+                            model.text.utf8.count >= 1_800 ? Color.orange : Color.secondary)
                         .monospacedDigit()
                 }
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+                .help("最多 2,000 个 UTF-8 字节；中文和 emoji 通常占多个字节")
             }
 
             ZStack {
                 RoundedRectangle(cornerRadius: 16).fill(cardFill)
                 if let result = model.result {
-                    Image(nsImage: result.image)
-                        .interpolation(.none)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(10)
-                        .accessibilityLabel("已生成的二维码")
+                    Button(action: model.enlargeQRCode) {
+                        Image(nsImage: result.image)
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .padding(10)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!model.canExport)
+                    .help("点击放大二维码，按 Esc 关闭预览")
+                    .accessibilityLabel("放大二维码")
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: model.error == nil ? "qrcode.viewfinder" : "exclamationmark.circle")
@@ -292,10 +173,20 @@ struct ContentView: View {
             }
             .frame(width: 232, height: 232)
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(cardBorder))
+            .overlay(alignment: .bottom) {
+                if model.isGenerating {
+                    Text("更新中…")
+                        .font(.system(size: 11))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(8)
+                }
+            }
 
             HStack(spacing: 10) {
                 Button(action: model.copyImage) {
-                    Label("复制图片", systemImage: "doc.on.doc")
+                    Label(model.imageCopied ? "已复制" : "复制图片", systemImage: model.imageCopied ? "checkmark" : "doc.on.doc")
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
                 }
@@ -311,23 +202,65 @@ struct ContentView: View {
                 .keyboardShortcut("s", modifiers: .command)
             }
             .controlSize(.large)
-            .disabled(model.result == nil)
+            .disabled(!model.canExport)
 
-            HStack(spacing: 5) {
-                Image(systemName: model.notice == nil ? "lock.shield" : "checkmark.circle")
-                Text(model.notice ?? "离线生成 · 内容不会上传")
-                    .lineLimit(2)
-            }
-            .font(.system(size: 10))
-            .foregroundStyle(model.notice == nil ? Color.secondary : brand)
-            .frame(height: 26)
-            .accessibilityElement(children: .combine)
+            NoticeView(model: model, defaultMessage: "离线生成 · 内容不会上传")
         }
+    }
+
+    private var inputStatus: String {
+        let count = model.text.utf8.count
+        if count > QRCode.maximumBytes { return "超出 \(count - QRCode.maximumBytes) 字节" }
+        if model.isGenerating { return "正在更新二维码…" }
+        if count >= 1_800 { return "接近上限，建议放大扫码" }
+        return "输入后自动生成"
+    }
+}
+
+private struct NoticeView: View {
+    @ObservedObject var model: QRModel
+    @Environment(\.colorScheme) private var colorScheme
+    let defaultMessage: String
+
+    private var color: Color {
+        guard let notice = model.notice else { return .secondary }
+        switch notice.kind {
+        case .success: return brandColor(colorScheme)
+        case .warning: return .orange
+        case .failure: return .red
+        }
+    }
+
+    private var icon: String {
+        guard let notice = model.notice else { return "lock.shield" }
+        switch notice.kind {
+        case .success: return "checkmark.circle"
+        case .warning: return "exclamationmark.triangle"
+        case .failure: return "xmark.circle"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+            Text(model.notice?.message ?? defaultMessage).lineLimit(2)
+                .accessibilityElement(children: .combine)
+            if model.notice?.offersUndo == true {
+                Button("撤销", action: model.undoHistoryRemoval)
+                    .buttonStyle(.plain)
+                    .underline()
+                    .frame(height: 24)
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(color)
+        .frame(height: 26)
     }
 }
 
 private struct HistoryView: View {
     @ObservedObject var history: QRHistoryStore
+    @ObservedObject var model: QRModel
     @Environment(\.colorScheme) private var colorScheme
     let onSelect: (QRHistoryEntry) -> Void
 
@@ -337,10 +270,11 @@ private struct HistoryView: View {
                 Text("历史记录")
                     .font(.system(size: 14, weight: .semibold))
                 Spacer()
-                Button("清空", role: .destructive, action: history.removeAll)
+                Button("清空", role: .destructive) { model.confirmsHistoryClear = true }
                     .buttonStyle(.plain)
                     .foregroundStyle(history.entries.isEmpty ? Color.secondary : Color.red)
                     .disabled(history.entries.isEmpty)
+                    .frame(height: 24)
             }
 
             if history.entries.isEmpty {
@@ -363,41 +297,47 @@ private struct HistoryView: View {
                             HStack(spacing: 10) {
                                 Button { onSelect(entry) } label: {
                                     VStack(alignment: .leading, spacing: 5) {
+                                        if let host = entry.linkHost {
+                                            Text(host)
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(1)
+                                        }
                                         Text(entry.text)
                                             .font(.system(size: 12))
-                                            .foregroundStyle(.primary)
+                                            .foregroundStyle(entry.linkHost == nil ? Color.primary : Color.secondary)
                                             .lineLimit(2)
                                             .multilineTextAlignment(.leading)
-                                        Text(entry.createdAt, style: .relative)
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.secondary)
+                                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                                            Text(entry.timeLabel(relativeTo: context.date))
+                                                .font(.system(size: 11))
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .help(entry.text)
 
-                                Button { history.remove(entry) } label: {
+                                Button { model.removeHistory(entry) } label: {
                                     Image(systemName: "trash")
                                         .foregroundStyle(.secondary)
+                                        .frame(width: 24, height: 24)
                                 }
                                 .buttonStyle(.plain)
                                 .help("删除这条记录")
                                 .accessibilityLabel("删除这条记录")
                             }
                             .padding(11)
-                            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+                            .background(Color.primary.opacity(model.hoveredHistoryEntry == entry.id ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 10))
+                            .onHover { model.hoveredHistoryEntry = $0 ? entry.id : nil }
                         }
                     }
                 }
             }
 
-            HStack(spacing: 5) {
-                Image(systemName: "lock.shield")
-                Text("最多保留 20 条 · 仅存储在本机")
-            }
-            .font(.system(size: 10))
-            .foregroundStyle(.secondary)
+            NoticeView(model: model, defaultMessage: "最多保留 20 条 · 仅存储在本机")
         }
         .frame(height: historyHeight)
     }
@@ -444,6 +384,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "退出 QuickQR", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "关闭预览", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         appItem.submenu = appMenu
         menu.addItem(appItem)
         let editItem = NSMenuItem()

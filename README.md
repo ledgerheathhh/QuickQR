@@ -6,11 +6,13 @@ A native macOS menu bar QR code generator, built with SwiftUI, AppKit, and the s
 
 1. After building from source as described below, double-click `dist/QuickQR.app`, or drag it into "Applications" and open it. If an older 「轻码」 build is installed, quit the old app first, then use the new version.
 2. Click the QR code icon in the menu bar at the top of the screen, and enter text or a link, or click "Paste".
-3. The QR code updates automatically a moment after you stop typing; click "Copy Image" or "Save PNG".
-4. Click the history button in the header to reopen any of the latest 20 generated items, or delete records you no longer need.
+3. The QR code updates automatically a moment after you stop typing; click "Copy Image" or "Save PNG". The previous preview stays visible during an update, while export is disabled until the new code is ready. Click the code to open a resizable preview, and press Esc or ⌘W to close it.
+4. Click the history button in the header to reopen any of the latest 20 generated items, or delete records you no longer need. A deleted item can be restored using "Undo" for five seconds; clearing all history requires confirmation. Copying or saving successfully records the exported content immediately.
 5. Click outside the popover to dismiss it; the content is kept until you quit the app. Right-click the menu bar icon to quit.
 
 The app shows no Dock icon. All content is generated locally: it does not connect to the network, and its 20-item history stays in the current macOS user's local preferences. It never reads the clipboard on its own; it reads the clipboard only when you click Paste or use the system paste shortcut. Input preserves original line breaks and leading/trailing spaces, and blank content produces no QR code.
+
+The Paste button replaces the whole input and is labeled "Paste and Replace" when text is present; ⌘V inserts at the cursor or replaces the selection. Clearing the input and replacing it with the button can both be undone with ⌘Z. The byte counter warns near the limit and reports the excess when the input is too long.
 
 Keyboard shortcuts are available while the popover is open:
 
@@ -18,8 +20,10 @@ Keyboard shortcuts are available while the popover is open:
 | --- | --- |
 | Paste text | ⌘V |
 | Select all text | ⌘A |
+| Undo input editing, clearing, or replacement | ⌘Z |
 | Copy QR code image | ⇧⌘C |
 | Save PNG | ⌘S |
+| Close enlarged preview | Esc / ⌘W |
 | Quit | ⌘Q |
 
 If you want the app to launch at login, you can add it to macOS "Login Items" yourself. This version does not modify system login items.
@@ -56,7 +60,7 @@ bash build.sh /path/to/output
 
 The script uses the Apple SDK and the Swift compiler; when `/Applications/Xcode.app` is installed, it prefers the Swift toolchain bundled there, which contains complete dual-architecture compatibility libraries, and otherwise uses the Command Line Tools. The SDK path can be specified through `DEVELOPER_DIR`. No third-party packages need to be installed, and no network access is required.
 
-After installing the full Xcode, running `bash test.sh` runs the stable input-validation unit tests through the shared scheme. Core Image and Vision read-back are graphics integration tests and are skipped by default; run them explicitly in an ordinary macOS terminal that has access to the system graphics services:
+After installing the full Xcode, running `bash test.sh` runs validation, editor, history, and generation/export-state tests through the shared scheme. Clipboard tests use an isolated pasteboard and require access to macOS user-session services. Core Image and Vision read-back are graphics integration tests and are skipped by default; run them explicitly in an ordinary macOS terminal that has access to the system graphics services:
 
 ```sh
 QUICKQR_RUN_VISION_TESTS=1 bash test.sh
@@ -64,7 +68,7 @@ QUICKQR_RUN_VISION_TESTS=1 bash test.sh
 
 Builds and graphics integration tests are kept separate, so that graphics services in a restricted execution environment cannot block app packaging.
 
-`bash render-appearance.sh` renders the popover's five states in both system appearances into `dist/appearance/`, without launching the app and without needing screen-recording permission. It compiles a copy of the sources with the app's `@main` entry point removed, so the images come from the real views rather than a reimplementation of them. It also fails if the generator and history pages stop reporting the same height — the property that keeps the popover from resizing when the header button is toggled:
+`bash render-appearance.sh` renders the popover's eleven states in both system appearances into `dist/appearance/`, without launching the app and without needing screen-recording permission. It compiles a copy of the sources with the app's `@main` entry point removed, so the images come from the real views rather than a reimplementation of them. It also fails if the generator and history pages stop reporting the same height — the property that keeps the popover from resizing when the header button is toggled:
 
 ```sh
 bash render-appearance.sh [output-directory]
@@ -72,7 +76,8 @@ bash render-appearance.sh [output-directory]
 
 ## Files
 
-- `Sources/App.swift`: menu bar, popover, clipboard, and file saving.
+- `Sources/App.swift`: menu bar, popover, and history interface.
+- `Sources/QRModel.swift`: generation/export state, clipboard, file saving, feedback, and enlarged preview.
 - `Sources/History.swift`: local, deduplicated 20-item history storage.
 - `Sources/QRCode.swift`: QR code generation, quiet zone, and PNG encoding.
 - `QuickQR.xcodeproj`: macOS app project that can be run directly in Xcode.
@@ -84,6 +89,13 @@ bash render-appearance.sh [output-directory]
 - `Info.plist`: app bundle configuration.
 
 ## Verification records
+
+Interaction update verification:
+
+- Generation/export-state regression tests cover stale exports, superseded generation, immediate history recording, exported save snapshots, failures, and deletion undo. Explicit deletion or clearing prevents pending automatic recording from recreating history; editor tests cover undo/redo of external clearing and replacement alongside input-method composition.
+- Eleven states in both appearances report 368×598 pt, including updating, byte limits, typed feedback, and deletion undo.
+- An isolated app instance using the production views and delegate verified native input undo, enlarged-preview opening and Esc closing, history deletion/undo, and cancellation of the clear-history confirmation. The save panel exported a 1014×1014 PNG to a temporary directory, then reopened the popover with its success message.
+- Universal packaging succeeds for arm64 and x86_64. Interactive verification was on Apple Silicon; Intel hardware and other macOS versions were not exercised.
 
 Verification of the current unreleased fixes:
 

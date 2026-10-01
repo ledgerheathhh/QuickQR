@@ -28,11 +28,16 @@ struct TextInput: NSViewRepresentable {
         // uncommitted composition is left alone.
         let isExternalChange = text != context.coordinator.lastReported
         if textView.string != text, !textView.hasMarkedText() || isExternalChange {
-            textView.string = text
+            context.coordinator.appliesExternalChange = true
+            textView.breakUndoCoalescing()
+            textView.insertText(text, replacementRange: NSRange(location: 0, length: (textView.string as NSString).length))
+            textView.breakUndoCoalescing()
+            textView.undoManager?.setActionName(text.isEmpty ? "清空内容" : "替换内容")
             context.coordinator.lastReported = text
             textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
             textView.scrollRangeToVisible(textView.selectedRange())
             textView.needsDisplay = true
+            context.coordinator.appliesExternalChange = false
         }
         if context.coordinator.focusRequest != focusRequest {
             context.coordinator.focusRequest = focusRequest
@@ -43,6 +48,7 @@ struct TextInput: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
         var focusRequest: Int?
+        var appliesExternalChange = false
         /// The last value this coordinator wrote into the binding, so that a change
         /// arriving from outside can be told apart from uncommitted composition.
         var lastReported = ""
@@ -52,7 +58,9 @@ struct TextInput: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             lastReported = textView.string
-            text.wrappedValue = textView.string
+            if !appliesExternalChange, text.wrappedValue != textView.string {
+                text.wrappedValue = textView.string
+            }
             textView.needsDisplay = true
         }
     }
