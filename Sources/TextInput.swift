@@ -4,8 +4,9 @@ import SwiftUI
 struct TextInput: NSViewRepresentable {
     @Binding var text: String
     var focusRequest: Int
+    @Binding var isFocused: Bool
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text, isFocused: $isFocused) }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -14,6 +15,10 @@ struct TextInput: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         let textView = QRTextView()
         textView.delegate = context.coordinator
+        textView.onFocusChange = { [weak coordinator = context.coordinator] focused in
+            // Focus can change during SwiftUI layout; publish after that update.
+            DispatchQueue.main.async { coordinator?.isFocused.wrappedValue = focused }
+        }
         scrollView.documentView = textView
         return scrollView
     }
@@ -21,6 +26,7 @@ struct TextInput: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? QRTextView else { return }
         context.coordinator.text = $text
+        context.coordinator.isFocused = $isFocused
         // While an input method is composing, `textView.string` carries candidates the
         // binding has never seen, and rewriting it here would discard them — which
         // happens on every SwiftUI update, including the one that publishes a freshly
@@ -47,13 +53,17 @@ struct TextInput: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
+        var isFocused: Binding<Bool>
         var focusRequest: Int?
         var appliesExternalChange = false
         /// The last value this coordinator wrote into the binding, so that a change
         /// arriving from outside can be told apart from uncommitted composition.
         var lastReported = ""
 
-        init(text: Binding<String>) { self.text = text }
+        init(text: Binding<String>, isFocused: Binding<Bool>) {
+            self.text = text
+            self.isFocused = isFocused
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
@@ -67,6 +77,7 @@ struct TextInput: NSViewRepresentable {
 }
 
 final class QRTextView: NSTextView {
+    var onFocusChange: ((Bool) -> Void)?
     private let placeholderStorage = NSTextStorage()
     private let placeholderLayout = NSLayoutManager()
     private let placeholderContainer = NSTextContainer()
@@ -98,6 +109,18 @@ final class QRTextView: NSTextView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { onFocusChange?(true) }
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        if accepted { onFocusChange?(false) }
+        return accepted
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)

@@ -22,6 +22,7 @@ final class TextInputTests: XCTestCase {
     func testInputSynchronizationSelectionAndFocus() throws {
         let (window, host, model, textView) = try makeInput()
         XCTAssertFalse(textView.isAutomaticQuoteSubstitutionEnabled)
+        XCTAssertTrue(model.isFocused)
         let input = "\"hello\" 'world' 中文“原样保留”\n👋"
         for character in input {
             textView.insertText(String(character), replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -41,12 +42,15 @@ final class TextInputTests: XCTestCase {
         XCTAssertEqual(textView.selectedRange(), NSRange(location: 2, length: 3))
 
         window.makeFirstResponder(nil)
+        refresh(host)
+        XCTAssertFalse(model.isFocused)
         model.text = "  \"粘贴👋\"\n第二行  "
         model.focusRequest += 1
         refresh(host)
         XCTAssertEqual(textView.string, model.text)
         XCTAssertEqual(textView.selectedRange().location, (model.text as NSString).length)
         XCTAssertTrue(window.firstResponder === textView)
+        XCTAssertTrue(model.isFocused)
 
         model.text = ""
         model.focusRequest += 1
@@ -157,13 +161,14 @@ final class TextInputTests: XCTestCase {
 private final class InputModel: ObservableObject {
     @Published var text = ""
     @Published var focusRequest = 0
+    @Published var isFocused = false
 }
 
 private struct InputHarness: View {
     @ObservedObject var model: InputModel
 
     var body: some View {
-        TextInput(text: $model.text, focusRequest: model.focusRequest)
+        TextInput(text: $model.text, focusRequest: model.focusRequest, isFocused: $model.isFocused)
             .frame(width: 324, height: 96)
     }
 }

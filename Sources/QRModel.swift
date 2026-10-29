@@ -23,7 +23,6 @@ final class QRModel: ObservableObject {
     @Published var showsHistory = false
     @Published var historySearchText = ""
     @Published var confirmsHistoryClear = false
-    @Published var hoveredHistoryEntry: UUID?
     let history: QRHistoryStore
     /// Reopens the transient popover after a separate save panel closes.
     var restorePopover: (() -> Void)?

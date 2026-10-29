@@ -24,9 +24,32 @@ private func brandGlyphColor(_ scheme: ColorScheme) -> Color {
     brandColor(scheme).opacity(scheme == .dark ? 0.85 : 0.45)
 }
 
+// Use the property wrapper in script builds, where the SDK's State macro is unavailable.
+private typealias LocalState<Value> = SwiftUI.State<Value>
+
+private struct InteractionButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+    @LocalState private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .background(Color.primary.opacity(isEnabled && isHovered ? 0.07 : 0),
+                        in: RoundedRectangle(cornerRadius: 6))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.65 : 1) : 0.4)
+            .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+            .onHover { isHovered = $0 }
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var model: QRModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @LocalState private var inputIsFocused = false
 
     private var brand: Color { brandColor(colorScheme) }
     private var glyph: Color { brandGlyphColor(colorScheme) }
@@ -64,7 +87,7 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 24, height: 24)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(InteractionButtonStyle())
                 .help(model.showsHistory ? "返回生成器" : "历史记录")
                 .accessibilityLabel(model.showsHistory ? "返回生成器" : "历史记录")
                 Menu {
@@ -82,14 +105,19 @@ struct ContentView: View {
                 .accessibilityLabel("更多选项")
             }
 
-            if model.showsHistory {
-                HistoryView(history: model.history, model: model) { entry in
-                    model.restore(entry)
-                    model.showsHistory = false
+            ZStack {
+                if model.showsHistory {
+                    HistoryView(history: model.history, model: model) { entry in
+                        model.restore(entry)
+                        model.showsHistory = false
+                    }
+                    .transition(.opacity)
+                } else {
+                    generator
+                        .transition(.opacity)
                 }
-            } else {
-                generator
             }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: model.showsHistory)
         }
         .padding(22)
         .frame(width: contentWidth)
@@ -100,7 +128,6 @@ struct ContentView: View {
         } message: {
             Text("将删除本机保存的全部历史记录，此操作无法撤销。")
         }
-        .onAppear { model.inputFocusRequest += 1 }
     }
 
     private var generator: some View {
@@ -113,7 +140,7 @@ struct ContentView: View {
                         Label(model.text.isEmpty ? "粘贴" : "粘贴并替换", systemImage: "doc.on.clipboard")
                             .frame(height: 24)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(InteractionButtonStyle())
                     .foregroundStyle(brand)
                     .font(.system(size: 11, weight: .medium))
                     .help(model.text.isEmpty ? "粘贴剪贴板文字" : "替换全部内容，可按 ⌘Z 撤销")
@@ -121,15 +148,18 @@ struct ContentView: View {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                             .frame(width: 24, height: 24)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(InteractionButtonStyle())
                     .disabled(model.text.isEmpty)
                     .help("清空内容，可按 ⌘Z 撤销")
                     .accessibilityLabel("清空内容")
                 }
-                TextInput(text: $model.text, focusRequest: model.inputFocusRequest)
+                TextInput(text: $model.text, focusRequest: model.inputFocusRequest, isFocused: $inputIsFocused)
                 .frame(height: 96)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.09)))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(inputIsFocused ? brand.opacity(0.7) : Color.primary.opacity(0.09),
+                                  lineWidth: inputIsFocused ? 1.5 : 1))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: inputIsFocused)
                 HStack {
                     Text(inputStatus)
                         .foregroundStyle(model.text.utf8.count > QRCode.maximumBytes ? Color.red : Color.secondary)
@@ -187,9 +217,11 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 Button(action: model.copyImage) {
                     Label(model.imageCopied ? "已复制" : "复制图片", systemImage: model.imageCopied ? "checkmark" : "doc.on.doc")
+                        .contentTransition(.opacity)
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
                 }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: model.imageCopied)
                 .buttonStyle(.borderedProminent)
                 .tint(accent)
                 .keyboardShortcut("c", modifiers: [.command, .shift])
@@ -206,6 +238,7 @@ struct ContentView: View {
 
             NoticeView(model: model, defaultMessage: "离线生成 · 内容不会上传")
         }
+        .onAppear { model.inputFocusRequest += 1 }
     }
 
     private var inputStatus: String {
@@ -220,6 +253,7 @@ struct ContentView: View {
 private struct NoticeView: View {
     @ObservedObject var model: QRModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let defaultMessage: String
 
     private var color: Color {
@@ -243,11 +277,13 @@ private struct NoticeView: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
+                .contentTransition(.opacity)
             Text(model.notice?.message ?? defaultMessage).lineLimit(2)
+                .contentTransition(.opacity)
                 .accessibilityElement(children: .combine)
             if model.notice?.offersUndo == true {
                 Button("撤销", action: model.undoHistoryRemoval)
-                    .buttonStyle(.plain)
+                    .buttonStyle(InteractionButtonStyle())
                     .underline()
                     .frame(height: 24)
             }
@@ -255,6 +291,7 @@ private struct NoticeView: View {
         .font(.system(size: 11))
         .foregroundStyle(color)
         .frame(height: 26)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: model.notice?.message)
     }
 }
 
@@ -272,7 +309,7 @@ private struct HistoryView: View {
                     .font(.system(size: 14, weight: .semibold))
                 Spacer()
                 Button("清空", role: .destructive) { model.confirmsHistoryClear = true }
-                    .buttonStyle(.plain)
+                    .buttonStyle(InteractionButtonStyle())
                     .foregroundStyle(history.entries.isEmpty ? Color.secondary : Color.red)
                     .disabled(history.entries.isEmpty)
                     .frame(height: 24)
@@ -290,7 +327,7 @@ private struct HistoryView: View {
                             .foregroundStyle(.secondary)
                             .frame(width: 24, height: 24)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(InteractionButtonStyle())
                     .help("清除搜索")
                     .accessibilityLabel("清除搜索")
                 }
@@ -319,42 +356,8 @@ private struct HistoryView: View {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(entries) { entry in
-                            HStack(spacing: 10) {
-                                Button { onSelect(entry) } label: {
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        if let host = entry.linkHost {
-                                            Text(host)
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundStyle(.primary)
-                                                .lineLimit(1)
-                                        }
-                                        Text(entry.text)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(entry.linkHost == nil ? Color.primary : Color.secondary)
-                                            .lineLimit(2)
-                                            .multilineTextAlignment(.leading)
-                                        Text(entry.timeLabel)
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .help(entry.text)
-
-                                Button { model.removeHistory(entry) } label: {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 24, height: 24)
-                                }
-                                .buttonStyle(.plain)
-                                .help("删除这条记录")
-                                .accessibilityLabel("删除这条记录")
-                            }
-                            .padding(11)
-                            .background(Color.primary.opacity(model.hoveredHistoryEntry == entry.id ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 10))
-                            .onHover { model.hoveredHistoryEntry = $0 ? entry.id : nil }
+                            HistoryRow(entry: entry, onSelect: { onSelect(entry) },
+                                       onDelete: { model.removeHistory(entry) })
                         }
                     }
                 }
@@ -363,6 +366,54 @@ private struct HistoryView: View {
             NoticeView(model: model, defaultMessage: "最多保留 20 条 · 仅存储在本机")
         }
         .frame(height: historyHeight)
+    }
+}
+
+private struct HistoryRow: View {
+    let entry: QRHistoryEntry
+    let onSelect: () -> Void
+    let onDelete: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @LocalState private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onSelect) {
+                VStack(alignment: .leading, spacing: 5) {
+                    if let host = entry.linkHost {
+                        Text(host)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
+                    Text(entry.text)
+                        .font(.system(size: 12))
+                        .foregroundStyle(entry.linkHost == nil ? Color.primary : Color.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(entry.timeLabel)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(entry.text)
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(InteractionButtonStyle())
+            .help("删除这条记录")
+            .accessibilityLabel("删除这条记录")
+        }
+        .padding(11)
+        .background(Color.primary.opacity(isHovered ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 10))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 }
 
