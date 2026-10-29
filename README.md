@@ -7,7 +7,7 @@ A native macOS menu bar QR code generator, built with SwiftUI, AppKit, and the s
 1. After building from source as described below, double-click `dist/QuickQR.app`, or drag it into "Applications" and open it. If an older 「轻码」 build is installed, quit the old app first, then use the new version.
 2. Click the QR code icon in the menu bar at the top of the screen, and enter text or a link, or click "Paste".
 3. The QR code updates automatically a moment after you stop typing; click "Copy Image" or "Save PNG". The previous preview stays visible during an update, while export is disabled until the new code is ready. Click the code to open a resizable preview, and press Esc or ⌘W to close it.
-4. Click the history button in the header to reopen any of the latest 20 generated items, or delete records you no longer need. A deleted item can be restored using "Undo" for five seconds; clearing all history requires confirmation. Copying or saving successfully records the exported content immediately.
+4. Click the history button in the header to reopen any of the latest 20 generated items, search their text or links, or delete records you no longer need. Search ignores letter case; clear the search to show all items again. History timestamps show a fixed date and time to the minute. A deleted item can be restored using "Undo" for five seconds; clearing all history requires confirmation. Copying or saving successfully records the exported content immediately.
 5. Click outside the popover to dismiss it; the content is kept until you quit the app. Right-click the menu bar icon to quit.
 
 The app shows no Dock icon. All content is generated locally: it does not connect to the network, and its 20-item history stays in the current macOS user's local preferences. It never reads the clipboard on its own; it reads the clipboard only when you click Paste or use the system paste shortcut. Input preserves original line breaks and leading/trailing spaces, and blank content produces no QR code.
@@ -68,7 +68,7 @@ QUICKQR_RUN_VISION_TESTS=1 bash test.sh
 
 Builds and graphics integration tests are kept separate, so that graphics services in a restricted execution environment cannot block app packaging.
 
-`bash render-appearance.sh` renders the popover's eleven states in both system appearances into `dist/appearance/`, without launching the app and without needing screen-recording permission. It compiles a copy of the sources with the app's `@main` entry point removed, so the images come from the real views rather than a reimplementation of them. It also fails if the generator and history pages stop reporting the same height — the property that keeps the popover from resizing when the header button is toggled:
+`bash render-appearance.sh` renders the popover's thirteen states in both system appearances into `dist/appearance/`, without launching the app and without needing screen-recording permission. It compiles a copy of the sources with the app's `@main` entry point removed, so the images come from the real views rather than a reimplementation of them. It also fails if the generator and history pages stop reporting the same height — the property that keeps the popover from resizing when the header button is toggled:
 
 ```sh
 bash render-appearance.sh [output-directory]

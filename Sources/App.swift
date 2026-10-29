@@ -265,6 +265,7 @@ private struct HistoryView: View {
     let onSelect: (QRHistoryEntry) -> Void
 
     var body: some View {
+        let entries = history.entries(matching: model.historySearchText)
         VStack(spacing: 12) {
             HStack {
                 Text("历史记录")
@@ -277,15 +278,39 @@ private struct HistoryView: View {
                     .frame(height: 24)
             }
 
-            if history.entries.isEmpty {
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("搜索文字或链接", text: $model.historySearchText)
+                    .textFieldStyle(.plain)
+                    .accessibilityLabel("搜索历史记录")
+                if !model.historySearchText.isEmpty {
+                    Button { model.historySearchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .help("清除搜索")
+                    .accessibilityLabel("清除搜索")
+                }
+            }
+            .font(.system(size: 12))
+            .frame(minHeight: 24)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.09)))
+
+            if entries.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
-                    Image(systemName: "clock.arrow.circlepath")
+                    Image(systemName: history.entries.isEmpty ? "clock.arrow.circlepath" : "magnifyingglass")
                         .font(.system(size: 42, weight: .ultraLight))
                         .foregroundStyle(brandGlyphColor(colorScheme))
-                    Text("还没有历史记录")
+                    Text(history.entries.isEmpty ? "还没有历史记录" : "没有匹配的历史记录")
                         .font(.system(size: 13, weight: .medium))
-                    Text("成功生成的内容会自动保存在这里")
+                    Text(history.entries.isEmpty ? "成功生成的内容会自动保存在这里" : "试试其他文字或链接关键词")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -293,7 +318,7 @@ private struct HistoryView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(history.entries) { entry in
+                        ForEach(entries) { entry in
                             HStack(spacing: 10) {
                                 Button { onSelect(entry) } label: {
                                     VStack(alignment: .leading, spacing: 5) {
@@ -308,11 +333,9 @@ private struct HistoryView: View {
                                             .foregroundStyle(entry.linkHost == nil ? Color.primary : Color.secondary)
                                             .lineLimit(2)
                                             .multilineTextAlignment(.leading)
-                                        TimelineView(.periodic(from: .now, by: 60)) { context in
-                                            Text(entry.timeLabel(relativeTo: context.date))
-                                                .font(.system(size: 11))
-                                                .foregroundStyle(.secondary)
-                                        }
+                                        Text(entry.timeLabel)
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.secondary)
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())

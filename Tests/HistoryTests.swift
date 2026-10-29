@@ -68,17 +68,50 @@ final class HistoryTests: XCTestCase {
         XCTAssertTrue(store.entries.isEmpty)
     }
 
-    func testChineseTimeLabelsAndLinkHostKeepOriginalContent() {
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
+    @MainActor
+    func testSearchMatchesTextAndLinksWithoutChangingHistory() throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = QRHistoryStore(defaults: defaults)
+        let url = "https://Example.com/你好?token=ABC#section"
+        store.record("你好 QuickQR", at: Date(timeIntervalSince1970: 1))
+        store.record(url, at: Date(timeIntervalSince1970: 2))
+        store.record("其他内容", at: Date(timeIntervalSince1970: 3))
+        let original = store.entries
+
+        XCTAssertEqual(store.entries(matching: "你好").map(\.text), [url, "你好 QuickQR"])
+        XCTAssertEqual(store.entries(matching: "  EXAMPLE.COM\n").map(\.text), [url])
+        XCTAssertEqual(store.entries(matching: "token=abc").map(\.text), [url])
+        XCTAssertEqual(store.entries(matching: "quickqr").map(\.text), ["你好 QuickQR"])
+        XCTAssertTrue(store.entries(matching: "不存在").isEmpty)
+        XCTAssertEqual(store.entries(matching: ""), original)
+        XCTAssertEqual(store.entries(matching: " \n\t"), original)
+        XCTAssertEqual(store.entries, original)
+        XCTAssertEqual(QRHistoryStore(defaults: defaults).entries, original)
+
+        store.remove(try XCTUnwrap(store.entries(matching: "token").first))
+        XCTAssertTrue(store.entries(matching: "token").isEmpty)
+        store.undoRemoval()
+        XCTAssertEqual(store.entries(matching: "token").map(\.text), [url])
+    }
+
+    func testTimeLabelsShowFixedDateAndMinuteAndLinksKeepOriginalContent() throws {
+        let date = try XCTUnwrap(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 10, day: 29, hour: 14, minute: 5, second: 10
+        )))
         let url = "https://example.com/你好?token=123#section"
-        let entry = QRHistoryEntry(id: UUID(), text: url, createdAt: now.addingTimeInterval(-10))
+        let entry = QRHistoryEntry(id: UUID(), text: url, createdAt: date)
         XCTAssertEqual(entry.linkHost, "example.com")
         XCTAssertEqual(entry.text, url)
-        XCTAssertEqual(entry.timeLabel(relativeTo: now), "刚刚")
-        let older = QRHistoryEntry(id: UUID(), text: "普通文字", createdAt: now.addingTimeInterval(-300))
+        XCTAssertTrue(entry.timeLabel.contains("2026"))
+        XCTAssertTrue(entry.timeLabel.contains("10"))
+        XCTAssertTrue(entry.timeLabel.contains("29"))
+        XCTAssertTrue(entry.timeLabel.contains("14:05"))
+        XCTAssertEqual(entry.timeLabel.filter { $0 == ":" }.count, 1)
+        let sameMinute = QRHistoryEntry(id: UUID(), text: "", createdAt: date.addingTimeInterval(40))
+        XCTAssertEqual(entry.timeLabel, sameMinute.timeLabel)
+        let older = QRHistoryEntry(id: UUID(), text: "普通文字", createdAt: date.addingTimeInterval(-300))
         XCTAssertNil(older.linkHost)
-        XCTAssertEqual(older.timeLabel(relativeTo: now), "5 分钟前")
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
-        XCTAssertTrue(QRHistoryEntry(id: UUID(), text: "", createdAt: yesterday).timeLabel(relativeTo: now).hasPrefix("昨天 "))
+        XCTAssertTrue(older.timeLabel.contains("14:00"))
     }
 }

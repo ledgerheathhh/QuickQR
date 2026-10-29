@@ -21,6 +21,7 @@ final class QRModel: ObservableObject {
     @Published private(set) var notice: Notice?
     @Published private(set) var imageCopied = false
     @Published var showsHistory = false
+    @Published var historySearchText = ""
     @Published var confirmsHistoryClear = false
     @Published var hoveredHistoryEntry: UUID?
     let history: QRHistoryStore

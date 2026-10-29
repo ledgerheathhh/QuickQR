@@ -77,6 +77,18 @@ var scenes: [Scene] {
             $0.history.record(sample)
             $0.removeHistory($0.history.entries[0])
             $0.showsHistory = true
+        },
+        Scene(name: "history-search", page: "history") {
+            $0.history.record(sample)
+            $0.history.record("QuickQR 本地生成，内容不会上传")
+            $0.history.record("https://developer.apple.com/documentation/appkit")
+            $0.historySearchText = "EXAMPLE"
+            $0.showsHistory = true
+        },
+        Scene(name: "history-no-results", page: "history") {
+            $0.history.record(sample)
+            $0.historySearchText = "不存在的内容"
+            $0.showsHistory = true
         }
     ]
 }

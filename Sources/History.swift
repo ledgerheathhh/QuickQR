@@ -12,19 +12,12 @@ struct QRHistoryEntry: Codable, Equatable, Identifiable {
         return url.host
     }
 
-    func timeLabel(relativeTo now: Date) -> String {
-        let elapsed = max(0, now.timeIntervalSince(createdAt))
-        if elapsed < 60 { return "刚刚" }
-        if elapsed < 3_600 { return "\(Int(elapsed / 60)) 分钟前" }
-        if Calendar.current.isDate(createdAt, inSameDayAs: now) {
-            return "\(Int(elapsed / 3_600)) 小时前"
-        }
-        let time = createdAt.formatted(.dateTime.locale(Locale(identifier: "zh_CN")).hour().minute())
-        if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now),
-           Calendar.current.isDate(createdAt, inSameDayAs: yesterday) {
-            return "昨天 \(time)"
-        }
-        return createdAt.formatted(.dateTime.locale(Locale(identifier: "zh_CN")).year().month().day().hour().minute())
+    var timeLabel: String {
+        createdAt.formatted(
+            .dateTime.locale(Locale(identifier: "zh_CN"))
+                .year().month(.twoDigits).day(.twoDigits)
+                .hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)
+        )
     }
 }
 
@@ -50,6 +43,12 @@ final class QRHistoryStore: ObservableObject {
         let stored = defaults.data(forKey: storageKey)
             .flatMap { try? JSONDecoder().decode([QRHistoryEntry].self, from: $0) } ?? []
         entries = Array(stored.prefix(limit))
+    }
+
+    func entries(matching query: String) -> [QRHistoryEntry] {
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return entries }
+        return entries.filter { $0.text.localizedStandardContains(keyword) }
     }
 
     func record(_ text: String, at date: Date = Date()) {
